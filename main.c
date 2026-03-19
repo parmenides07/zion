@@ -1,14 +1,16 @@
 #include "raylib.h"
+#include <stdio.h>
+#include <stdlib.h>
 
-struct Package {
+typedef struct Package {
 	char* buffer;
 	Vector2 location;
 	int capacity, length;
-};:
+} Package;
 
-Package newBuffer(Package curP);
-Package writeBuffer(Package curP, int input);
-void drawBuffer(char *buffer, Vector2 curPos);
+int newBuffer(Package* curP);
+int writeBuffer(Package* curP, int input);
+void drawBuffer(char* buffer, Vector2 curPos);
 
 int main(void)
 {
@@ -16,25 +18,37 @@ int main(void)
 	
 	int key = 0;
     	Vector2 lastPosition = {0.0f,0.0f};
-	struct Package curPack;
-    	while (!WindowShouldClose())
-    	{	
+	struct Package curPack = {NULL,{0.0f,0.0f},16,0};
+	Vector2 currentPosition = {0.0f, 0.0f};
+
+	if(newBuffer(&curPack) == 0)
+		exit(1);
+    	
+	while (!WindowShouldClose())
+    	{
+		BeginDrawing();
+		drawBuffer(curPack.buffer, currentPosition);
 		key = GetCharPressed(); 
 		if (key > 0)
 		{
-			Vector2 currentPosition = GetMousePosition();
-			if (currentPosition != lastPosition)
+			currentPosition = GetMousePosition();
+			if (!(currentPosition.x == lastPosition.x || currentPosition.y == lastPosition.x))
+			{
 				//write functiont o save current buffer
 				free(curPack.buffer);
-				//so i gotta fix this its trying to free nonexistant value idk	
-				curPack.capcity = 16;
+				curPack.capacity = 16;
 				curPack.length = 0;
-				curPack = newBuffer(curPack); 
-			curPack = writeBuffer(curPack, key);
-			drawBuffer(curpack.buffer, currentPosition);
+				curPack.location = currentPosition;
+				if(newBuffer(&curPack) == 0)
+					exit(1);
+			}
+			if(writeBuffer(&curPack, key)==0)
+				exit(1);
+			lastPosition = currentPosition;
 			//also draw at bottom left of screen 
 		}
 		key = 0;
+		EndDrawing();
 	}	
 
     	CloseWindow();
@@ -42,43 +56,47 @@ int main(void)
     	return 0;
 	}
 
-Package newBuffer(Package curP)
+int newBuffer(Package* curP)
 {
-	curP.buffer = (char*)malloc(sizeof(char) * curP.capacity);
+	curP->buffer = (char*)malloc(sizeof(char) * curP->capacity);
 
-	if (curP.buffer == NULL) {
-		return NULL;
+	if (curP->buffer == NULL) {
+		printf("yo");
+		return 0;
 	}
 	//writing [] signifies that we are trying to get the value so its like the same as doing *bufferLoc[]
-	curP.buffer[0] = '\0';
+	curP->buffer[0] = '\0';
 
-	return curP;
+	return 1;
 }
 
-Package writeBuffer(Package curP, int input)
+int writeBuffer(Package* curP, int input)
 {
-
-	if(curP.length > (curP.capacity-1)) 
+	if(curP->length > (curP->capacity-1)) 
 	{
-		curP.capacity *= 2;
-		char *temp = (char*)realloc(*curP.buffer, curP.capacity);
+		curP->capacity *= 2;
+		char *temp = (char*)realloc(curP->buffer, curP->capacity);
 		
 		if(temp == NULL)
 		{
-			free(temp);
-			return NULL; 
+			return 0; 
 		}
 
-		free(curP.buffer);
 
-		curP.buffer = temp; 
+		curP->buffer = temp; 
 		//expand array to make room for hte next character
 	}
 	
 	//note this will incriment length AFTER this line runs
-	curP.buffer[length++] = (char)input;
+	curP->buffer[curP->length++] = (char)input;
 	//remember null character must be put at the end of string to signify it has ended. 
-	curP.buffer[length] = '\0';
+	curP->buffer[curP->length] = '\0';
 
-	return curP; 
+	return 1; 
+}
+
+void drawBuffer(char* buffer, Vector2 curPos)
+{
+	DrawText(buffer, curPos.x, curPos.y, 20, RED);
+	DrawText(buffer, 0, GetScreenHeight()-20, 20, RED);
 }
