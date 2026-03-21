@@ -249,6 +249,8 @@ void deletePackage(HashMap* hashmap, Vector2 location)
     else if ((hashmap->hashArray[i]->location.x == location.x) && (hashmap->hashArray[i]->location.y == location.y))
     {
       hashmap->hashArray[i] = (Package*)1;
+      hashmap->count--;
+      return;
     }
     //this wraps around the array. notice how we use size since we want the full size not count
     i = (i+1) % hashmap->size;
