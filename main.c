@@ -176,16 +176,18 @@ void expandHash(HashMap* hashmap)
 {
   hashmap->size *= 2;
   //cant do realloc i need to do malloc then free wiht a move in between
-  Package** temp = (Package**)malloc(sizeof(Package*) * hashmap->count);
+  Package** temp = (Package**)malloc(sizeof(Package*) * hashmap->size);
   if (temp == NULL)
     exit(1);
 
   Package** middleman = hashmap->hashArray;
   hashmap->hashArray = temp;
 
-  for (int i = 0; i < hashmap->count; i++)
+  //use size since we want to go through the entire array(if we going through all we have to check null or tombstone to make sure we dont pull a nonexistant package)
+  for (int i = 0; i < hashmap->size/2; i++)
   {
-    insertPackage(hashmap, middleman[i]);
+    if(!(middleman[i] == NULL || middleman[i] == (Package*)1))
+      insertPackage(hashmap, middleman[i]);
   }
   free(middleman);
 }
@@ -200,15 +202,18 @@ void insertPackage(HashMap* hashmap, Package* package)
 
     int index = hash(package->location.x, package->location.y, hashmap->size);
     //do while executes at least once
-    int i = 0;
-    do while (i != index)
+    int i = index;
+    do
     {
       if (hashmap->hashArray[i] == NULL || hashmap->hashArray[i] == (Package*)1)
+      {
         hashmap->hashArray[i] = package;
+        hashmap->count++;
         return;
-      //this wraps around the array
-      i = (i+1) % hashmap->count;
-    }
+      }
+      //this wraps around the array. notice how we use size since we want the full size not count
+      i = (i+1) % hashmap->size;
+    } while(i != index);
     expandHash(hashmap);
     insertPackage(hashmap, package);
 }
@@ -216,9 +221,36 @@ void insertPackage(HashMap* hashmap, Package* package)
 Package* lookupPackage(HashMap* hashmap, Vector2 location)
 {
 
+    int index = hash(location.x, location.y, hashmap->size);
+    //do while executes at least once
+    int i = index;
+    do
+    {
+      if(hashmap->hashArray[i] == NULL)
+        return NULL;
+      else if ((hashmap->hashArray[i]->location.x == location.x) && (hashmap->hashArray[i]->location.y == location.y))
+        return hashmap->hashArray[i];
+      //this wraps around the array. notice how we use size since we want the full size not count
+      i = (i+1) % hashmap->size;
+    } while(i != index);
+
+    return NULL;
 }
 
 void deletePackage(HashMap* hashmap, Vector2 location)
 {
-
+  int index = hash(location.x, location.y, hashmap->size);
+  //DOuu WHILE EXECUTESu AT least once
+  int i = index;
+  do
+  {
+    if(hashmap->hashArray[i] == NULL)
+      return;
+    else if ((hashmap->hashArray[i]->location.x == location.x) && (hashmap->hashArray[i]->location.y == location.y))
+    {
+      hashmap->hashArray[i] = (Package*)1;
+    }
+    //this wraps around the array. notice how we use size since we want the full size not count
+    i = (i+1) % hashmap->size;
+    } while(i != index);
 }
