@@ -31,13 +31,15 @@ void savePackage(Package* curP, PackageStorage* storray, Package* grid[][60]);
 void drawBuffer(char* buffer, Vector2 curPos);
 int hash(int x, int y, int size);
 void expandHash(HashMap* hashmap);
+//cameraloc refers to the location or offset and cellsize is set by zooming
+void daRenderer(PackageStorage* pacStor, Vector2 cameraLoc, int cellSize);
 void insertPackage(HashMap* map, Package* package);
 Package* lookupPackage(HashMap* map, Vector2 location);
 void deletePackage(HashMap* map, Vector2 location);
 
 int main(void)
 {
-  InitWindow(800, 450, "zion");
+  InitWindow(1200, 1200, "zion");
 
   int key = 0;
   Package* packageGrid[60][60];
@@ -45,6 +47,8 @@ int main(void)
   Package curPack = {NULL,{0.0f,0.0f},{0,0},16};
   PackageStorage storage = {NULL, 0, 16};
   Vector2 currentPosition = {0.0f, 0.0f};
+  Vector2 cameraLocation = {0.0f, 0.0f};
+  int cellsize = 20;
 
   if(newBuffer(&curPack) == 0)
     exit(1);
@@ -55,7 +59,7 @@ int main(void)
   {
     BeginDrawing();
     ClearBackground((Color){247, 246, 242, 255});
-    drawBuffer(curPack.buffer, currentPosition);
+    daRenderer(&storage, cameraLocation, cellsize);
     key = GetCharPressed();
     if (key > 0)
     {
@@ -76,6 +80,14 @@ int main(void)
         lastPosition = currentPosition;
         //also draw at bottom left of screen
     }
+    if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
+    {
+      cameraLocation.x += GetMouseDelta().x / cellsize;
+      cameraLocation.y += GetMouseDelta().y / cellsize;
+    }
+    cellsize += GetMouseWheelMove() * 20;
+    if(cellsize < 0)
+      cellsize = 0;
     key = 0;
     EndDrawing();
    }
@@ -167,6 +179,25 @@ void drawBuffer(char* buffer, Vector2 curPos)
   DrawText(buffer, 0, GetScreenHeight()-20, 20, ((Color){51,46,45,255}));
 }
 
+void daRenderer(PackageStorage* pacStor, Vector2 cameraLoc, int cellSize)
+{
+  Vector2 screenRelPos;
+  for (int i = 0; i < pacStor->length; i++)
+  {
+    screenRelPos.x = (pacStor->storageArray[i]->location.x - cameraLoc.x) * cellSize;
+    screenRelPos.y = (pacStor->storageArray[i]->location.y - cameraLoc.y) * cellSize;
+
+    if (screenRelPos.x >= 0 && screenRelPos.x <= GetScreenWidth())
+    {
+      if (screenRelPos.y >= 0 && screenRelPos.y <= GetScreenHeight())
+      {
+        DrawText(pacStor->storageArray[i]->buffer, screenRelPos.x, screenRelPos.y, cellSize, ((Color){51,46,45,255}));
+      }
+    }
+  }
+}
+
+
 int hash(int x, int y, int size)
 {
   return (x * 19 + y) % size;
@@ -228,6 +259,7 @@ Package* lookupPackage(HashMap* hashmap, Vector2 location)
     {
       if(hashmap->hashArray[i] == NULL)
         return NULL;
+      //need to check location to preven SEGFAULTING
       else if ((hashmap->hashArray[i]->location.x == location.x) && (hashmap->hashArray[i]->location.y == location.y))
         return hashmap->hashArray[i];
       //this wraps around the array. notice how we use size since we want the full size not count
