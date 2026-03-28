@@ -45,7 +45,7 @@ typedef struct ModifiedPackage {
 
 typedef struct IndexEntry {
   int id;
-  int fileOffset;
+  long fileOffset;
 } IndexEntry;
 
 typedef struct IndexArray {
@@ -116,6 +116,12 @@ int main(void) {
   //need to fill that null pointer with something before it starts.
   storage.storageArray = (Package**)malloc(sizeof(Package*)*storage.capacity);
 
+
+
+// HANDLE relationship array increasing and also indexarray and modified package increasing
+
+
+
   HashMap hashmap = {NULL, 16, 0};
   hashmap.hashArray = (Package**)calloc(hashmap.size, sizeof(Package*));
 
@@ -123,25 +129,13 @@ int main(void) {
     BeginDrawing();
     ClearBackground(BACKGROUND);
     DrawFPS(0,10);
-
-    //DO THIS FIRST GNG VVVVV
-
-    //rendering is VERY SLOW AT HIGH STORED PACKAGES so maybe be nuanced with cals, if new package added just print that package, if mouse zooming or panning then call da renderer, otherwise DO NOT
-    //and then always just call drawbuffer since its very low cost and neccesary
-
-
     daRenderer(&storage, cameraLocation, cellsize);
     drawBuffer(curPack.buffer, currentPosition, cellsize);
     key = GetCharPressed();
 
     if (key > 0) {
-        //currentPosition.x = GetMousePosition().x / cellsize;
-        //currentPosition.y = GetMousePosition().y / cellsize;
-        //if (!(currentPosition.x == lastPosition.x || currentPosition.y == lastPosition.y))
         if(writeBuffer(&curPack, key)==0)
             exit(1);
-        //lastPosition = currentPosition;
-        //also draw at bottom left of screen
     }
     currentPosition.x = GetMousePosition().x / cellsize;
     currentPosition.y = GetMousePosition().y / cellsize;
@@ -385,23 +379,57 @@ void expandHash(HashMap* hashmap) {
 }
 
 //Data Functions---------------------------------------------------------------------------------------------
-void pullIndexes(){
-  put index.zn into array
+void pullIndexes(IndexArray* indexArrayStruct) {
+  FILE* index = fopen("index.zn", "rb");
+  if (index == NULL) {
+    indexArrayStruct->length = 0;
+    indexArrayStruct->indexArray = NULL;
+    indexArrayStruct->capacity = 16;
+    return;
+  }
+  else {
+    fread(&indexArrayStruct->length, sizeof(int), 1, index);
+    indexArrayStruct->indexArray = (IndexEntry*)(malloc(sizeof(IndexEntry) * indexArrayStruct->length));
+    //fread(destination, sizeOfEachElement, numberOfElements, file);
+    fread(indexArrayStruct->indexArray, sizeof(IndexEntry), indexArrayStruct->length, index);
+    fclose(index);
+
+    indexArrayStruct->capacity = indexArrayStruct->length;
+  }
 }
 
-void diskSave(ModifiedPackage* modPack) {
-  //Package and ID File Index Save
+void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct) {
   int fileIndex;
-  open data
-  for (int i = 0; i < modPack; i++)
-  { EVERYTIME I REFER TO INDEX I mean the array of indexes
-    fileIndex = search index.zn array version for modPack->modPackArray[i]->id
-    if file index found go there and turn on flag that says deleted
-    either way, append package to end of file and capture that index
-    go back to index array and insert sortedly, if the fileindex did exist then you just replace preexisting value if its new then you just inser new
+  FILE* dataPtr;
+  dataPtr = fopen("data.zn", "ab+");
+  for (int i = 0; i < modPack->length; i++) {
+    int modPackageIndexInID = getIDIndexForModPackages(indexArrayStruct, modPack->modPackArray[i]->id);
+    if (modPackageIndexInID != -1) {
+      go to fileoffset of indexArrayStruct->indexArray[midIndex].fileOffset and flick flag saying deleted;
+    }
+    if old append package to end of data file and update fileoffset in array.
+    if new append pacakge to end of data file and insert new indexentry in array SORTEDLY use below function rename.
+            maybe put append package before if statments before allat. they do append package initially.
+    reorder to only have 2 if statements, 1 each and then shared operation.
   }
   close data
   open index
   delete index.zn and dump the array in a new one.
   close index
+}
+
+int getIDIndexForModPackages(IndexArray* indexArrayStruct, int id) {
+    int highIndex = indexArrayStruct->length - 1;
+    int lowIndex = 0;
+    int midIndex = (lowIndex + highIndex) / 2;
+    int matchID = id;
+    while(indexArrayStruct->indexArray[midIndex].id != matchID) {
+      if (indexArrayStruct->indexArray[midIndex].id < matchID)
+        lowIndex = midIndex + 1;
+      if (indexArrayStruct->indexArray[midIndex].id > matchID)
+        highIndex = midIndex -1;
+      if (lowIndex > highIndex)
+       that means its a new package so just skip the next step where we go to that fileoffset and flick the flag.
+       return -1;
+    return midIndex;
 }
