@@ -423,12 +423,18 @@ void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct) {
     }
     else {
       insertIndex = 1-modPackageIndexInID;
-      if (modPack->length + 1 > modPack->capacity) {
-       void**
+      if (indexArrayStruct->length + 1 > indexArrayStruct->capacity) {
+        Package** temp = (Package**)realloc(indexArrayStruct->indexArray, sizeof(Package*) * indexArrayStruct->length);
+        if (temp == NULL)
+          exit(-1);
+        indexArrayStruct->indexArray = temp;
       }
-      so first check if the array length +1 will exceed capacity. if so then realloc it.
-      if not then start at the end move all the elements at index larger than the modPackageIndexInId forward one space.
-      create a new indexEntry with the newFileOffset at that modPackageIndexInID;
+      for(i = indexArrayStruct->length-1; i > insertIndex; i--) {
+        indexArrayStruct->indexArray[i] = indexArrayStruct->indexArray[i-1];
+      } // we just moved everything forward one to make space for that one at insertIndex
+      IndexEntry newEntry = {}
+      indexArrayStruct->
+      create new indexEntry at insertIndex with newFile Offset
     }
   }
   close data
