@@ -19,15 +19,16 @@ typedef struct Relationship {
 }Relationship;
 
 typedef struct Package {
-  char* buffer;
+  bool deleted;
   int length;
+  char* buffer;
   int capacity;
   // Actual world location
   Vector2 location;
   Vector2 size;
   int id;
-  Relationship* relationships;
   int numRelationships;
+  Relationship* relationships;
   int capacRelationships;
 } Package;
 
@@ -96,6 +97,8 @@ void daRenderer(PackageStorage* pacStor, Vector2 cameraLoc, int cellSize);
 void insertPackage(HashMap* map, Package* package);
 Package* lookupPackage(HashMap* map, Vector2 location);
 void deletePackage(HashMap* map, Vector2 location);
+int getIDIndexForModPackages(IndexArray* indexArrayStruct, int id);
+void packageFileWrite(FILE* file, Package* package);
 
 int main(void) {
   InitWindow(1200, 1200, "zion");
@@ -104,7 +107,7 @@ int main(void) {
 
   int key = 0;
   //Vector2 lastPosition = {0.0f,0.0f};
-  Package curPack = {NULL,{0.0f,0.0f},{0,0}, 0, 16, 0, NULL};
+  Package curPack = {false, NULL,{0.0f,0.0f},{0,0}, 0, 16, 0, NULL};
   PackageStorage storage = {NULL, 0, 16};
   Vector2 currentPosition = {0.0f, 0.0f};
   Vector2 cameraLocation = {0.0f, 0.0f};
@@ -379,16 +382,18 @@ void expandHash(HashMap* hashmap) {
 }
 
 //Data Functions---------------------------------------------------------------------------------------------
-void pullIndexes(IndexArray* indexArrayStruct) {
+void pullindexes(IndexArray* indexArrayStruct) {
   FILE* index = fopen("index.zn", "rb");
   if (index == NULL) {
     indexArrayStruct->length = 0;
-    indexArrayStruct->indexArray = NULL;
+    indexArrayStruct->indexArray = malloc(sizeof(IndexEntry) * 16);
     indexArrayStruct->capacity = 16;
     return;
   }
   else {
-    fread(&indexArrayStruct->length, sizeof(int), 1, index);
+    if (fread(&indexArrayStruct->length, sizeof(int), 1, index) != 1) {
+        exit(-1);
+    }
     indexArrayStruct->indexArray = (IndexEntry*)(malloc(sizeof(IndexEntry) * indexArrayStruct->length));
     //fread(destination, sizeOfEachElement, numberOfElements, file);
     fread(indexArrayStruct->indexArray, sizeof(IndexEntry), indexArrayStruct->length, index);
@@ -401,16 +406,30 @@ void pullIndexes(IndexArray* indexArrayStruct) {
 void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct) {
   int fileIndex;
   FILE* dataPtr;
+  long newFileOffset;
   dataPtr = fopen("data.zn", "ab+");
+  int deleted = 1;
+  int insertIndex;
   for (int i = 0; i < modPack->length; i++) {
+    fseek(dataPtr, 0, SEEK_END);
+    newFileOffset = ftell(dataPtr);
+    fwrite(modPack->modPackArray[i], sizeof(&modPack->modPackArray[i]), 1, dataPtr); // Im not sure if this will have the size of the package containing the bytes in the buffer itself ratehr than jhust the buffer pointer which is teh same for all ykwim.
+    packageFileWrite(dataPtr, modPack->modPackArray[i]);
     int modPackageIndexInID = getIDIndexForModPackages(indexArrayStruct, modPack->modPackArray[i]->id);
-    if (modPackageIndexInID != -1) {
-      go to fileoffset of indexArrayStruct->indexArray[midIndex].fileOffset and flick flag saying deleted;
+    if (modPackageIndexInID >= 0) {
+      fseek(dataPtr, indexArrayStruct->indexArray[modPackageIndexInID].fileOffset, SEEK_SET);
+      fwrite(&deleted, sizeof(int), 1, dataPtr);
+      indexArrayStruct->indexArray[modPackageIndexInID].fileOffset = newFileOffset;
     }
-    if old append package to end of data file and update fileoffset in array.
-    if new append pacakge to end of data file and insert new indexentry in array SORTEDLY use below function rename.
-            maybe put append package before if statments before allat. they do append package initially.
-    reorder to only have 2 if statements, 1 each and then shared operation.
+    else {
+      insertIndex = 1-modPackageIndexInID;
+      if (modPack->length + 1 > modPack->capacity) {
+       void**
+      }
+      so first check if the array length +1 will exceed capacity. if so then realloc it.
+      if not then start at the end move all the elements at index larger than the modPackageIndexInId forward one space.
+      create a new indexEntry with the newFileOffset at that modPackageIndexInID;
+    }
   }
   close data
   open index
@@ -419,17 +438,35 @@ void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct) {
 }
 
 int getIDIndexForModPackages(IndexArray* indexArrayStruct, int id) {
-    int highIndex = indexArrayStruct->length - 1;
-    int lowIndex = 0;
-    int midIndex = (lowIndex + highIndex) / 2;
-    int matchID = id;
-    while(indexArrayStruct->indexArray[midIndex].id != matchID) {
-      if (indexArrayStruct->indexArray[midIndex].id < matchID)
-        lowIndex = midIndex + 1;
-      if (indexArrayStruct->indexArray[midIndex].id > matchID)
-        highIndex = midIndex -1;
-      if (lowIndex > highIndex)
-       that means its a new package so just skip the next step where we go to that fileoffset and flick the flag.
-       return -1;
-    return midIndex;
+  int low = 0;
+  int high = indexArrayStruct->length - 1;
+  int mid;
+
+  while (low <= high) {
+    mid = (low + high) / 2;
+
+    if (indexArrayStruct->indexArray[mid].id == id)
+        return mid;
+    else if (indexArrayStruct->indexArray[mid].id < id)
+        low = mid + 1;
+    else
+        high = mid - 1;
+  }
+  return -(low+1);
 }
+
+void packageFileWrite(FILE* file, Package* package) {
+  fwrite(&package->deleted, sizeof(bool), 1, file);
+  fwrite(&package->length, sizeof(int), 1, file);
+  fwrite(package->buffer, sizeof(char*)* package->length, 1, file); //NOTE NO &, it is already a pointer
+  fwrite(&package->capacity, sizeof(int), 1, file);
+  fwrite(&package->location, sizeof(Vector2), 1, file);
+  fwrite(&package->size, sizeof(Vector2), 1, file);
+  fwrite(&package->id, sizeof(int), 1, file);
+  fwrite(&package->numRelationships, sizeof(int), 1, file);
+  fwrite(package->relationships, sizeof(Relationship) * package->numRelationships, 1, file); //no & same reason as above
+  fwrite(&package->capacRelationships, sizeof(int), 1, file);
+}
+
+//write a build package file that takes ID and then searches for it in current storage array
+//if not there it builds from disk
