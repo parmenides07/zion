@@ -408,17 +408,17 @@ void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct) {
   int fileIndex;
   FILE* dataPtr;
   long newFileOffset;
-  dataPtr = fopen("data.zn", "ab+");
+  FILE* data = fopen("data.zn", "ab+");
   int deleted = 1;
   int insertIndex;
   for (int i = 0; i < modPack->length; i++) {
-    fseek(dataPtr, 0, SEEK_END);
-    newFileOffset = ftell(dataPtr);
+    fseek(data, 0, SEEK_END);
+    newFileOffset = ftell(data);
     packageFileWrite(dataPtr, modPack->modPackArray[i]);
     int modPackageIndexInID = getIDIndexForModPackages(indexArrayStruct, modPack->modPackArray[i]->id);
     if (modPackageIndexInID >= 0) {
-      fseek(dataPtr, indexArrayStruct->indexArray[modPackageIndexInID].fileOffset, SEEK_SET);
-      fwrite(&deleted, sizeof(int), 1, dataPtr);
+      fseek(data, indexArrayStruct->indexArray[modPackageIndexInID].fileOffset, SEEK_SET);
+      fwrite(&deleted, sizeof(int), 1, data);
       indexArrayStruct->indexArray[modPackageIndexInID].fileOffset = newFileOffset;
     }
     else {
@@ -437,10 +437,10 @@ void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct) {
       indexArrayStruct->indexArray[insertIndex] = newEntry;
     }
   }
-  fclose(dataPtr);
-  FILE* indexPtr = fopen("index.zn", "wb");
-  indexFileWrite(indexPtr, indexArrayStruct);
-  fclose(indexPtr);
+  fclose(data);
+  FILE* index = fopen("index.zn", "wb");
+  indexFileWrite(index, indexArrayStruct);
+  fclose(index);
 }
 
 int getIDIndexForModPackages(IndexArray* indexArrayStruct, int id) {
@@ -482,23 +482,39 @@ void indexFileWrite(FILE* file, IndexArray* indexArr) {
   fwrite(&indexArr->capacity, sizeof(int), 1, file); // same as length
 }
 
-Package* packageRetrieval(int id, PackageStorage* storageArrayStruct) {
+Package* packageRetrieval(IndexArray* indexArrayStruct, int id, PackageStorage* storageArrayStruct) {
    // gives location of package based on id whether it be one built for the session from disk or one stored in storage array.
    //searches packagememory first if not there it checks disk and builds and returns pointer to new package built for this session.
   // dont need to check modifiedpackages since all of those are already in packagememory itd be redudant
+  FILE* data = fopen("data.zn", "WHAT MODE IDK");
+
+  int index = getIDIndexForModPackages(indexArrayStruct, id);
+  int fileOffset = indexArrayStruct->indexArray[index].fileOffset;
+  fseek(data, fileOffset, SEEK_SET); //essentialyl start at begnning and then go down the amount of file offset
+
   Package* package = (Package*)malloc(sizeof(Package));
   if (package == NULL)
     exit(1);
   fread(&package->deleted, sizeof(bool), 1, file);
+
   fread(&package->length, sizeof(int), 1, file);
-  malloc based on above
+  char* bufferAll = (char*)malloc(sizeof(char)*package->length);
+  if (bufferAll == NULL)
+    exit(1);
+  package->buffer = bufferAll;
   fread(package->buffer, sizeof(char*)* package->length, 1, file); //NOTE NO &, it is already a pointer
   fread(&package->capacity, sizeof(int), 1, file);
+
   fread(&package->location, sizeof(Vector2), 1, file);
   fread(&package->size, sizeof(Vector2), 1, file);
   fread(&package->id, sizeof(int), 1, file);
+
   fread(&package->numRelationships, sizeof(int), 1, file);
-  malloc based above
+  Relationship* relArrayAll = (Relationship*)malloc(sizeof(Relationship)*package->numRelationships);//array of relationshios (NOT POINTER TO ARRAY which would be **Relationship)
+  //we can do sizeofrelationship times number because every relationship struct is the same size there is no variable lengths in it
+  if (relArrayAll == NULL)
+    exit(1);
+  package->relationships = relArrayAll;
   fread(package->relationships, sizeof(Relationship) * package->numRelationships, 1, file); //no & same reason as above
   fread(&package->capacRelationships, sizeof(int), 1, file);
 
