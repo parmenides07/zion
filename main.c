@@ -50,8 +50,8 @@ typedef struct IndexEntry {
 } IndexEntry;
 
 typedef struct IndexArray {
-  IndexEntry* indexArray;
   int length;
+  IndexEntry* indexArray;
   int capacity;
 } IndexArray;
 
@@ -99,6 +99,7 @@ Package* lookupPackage(HashMap* map, Vector2 location);
 void deletePackage(HashMap* map, Vector2 location);
 int getIDIndexForModPackages(IndexArray* indexArrayStruct, int id);
 void packageFileWrite(FILE* file, Package* package);
+void indexFileWrite(FILE* file, IndexArray* indexArr);
 
 int main(void) {
   InitWindow(1200, 1200, "zion");
@@ -121,7 +122,7 @@ int main(void) {
 
 
 
-// HANDLE relationship array increasing and also indexarray and modified package increasing
+// RENAMAE PACKAGESTORAGE TO PACKAGE MEMORY all working packages. MAKE IT A HASHMAP BY INDEX
 
 
 
@@ -413,7 +414,6 @@ void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct) {
   for (int i = 0; i < modPack->length; i++) {
     fseek(dataPtr, 0, SEEK_END);
     newFileOffset = ftell(dataPtr);
-    fwrite(modPack->modPackArray[i], sizeof(&modPack->modPackArray[i]), 1, dataPtr); // Im not sure if this will have the size of the package containing the bytes in the buffer itself ratehr than jhust the buffer pointer which is teh same for all ykwim.
     packageFileWrite(dataPtr, modPack->modPackArray[i]);
     int modPackageIndexInID = getIDIndexForModPackages(indexArrayStruct, modPack->modPackArray[i]->id);
     if (modPackageIndexInID >= 0) {
@@ -422,25 +422,25 @@ void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct) {
       indexArrayStruct->indexArray[modPackageIndexInID].fileOffset = newFileOffset;
     }
     else {
-      insertIndex = 1-modPackageIndexInID;
+      insertIndex = -modPackageIndexInID-1;
       if (indexArrayStruct->length + 1 > indexArrayStruct->capacity) {
-        Package** temp = (Package**)realloc(indexArrayStruct->indexArray, sizeof(Package*) * indexArrayStruct->length);
+        indexArrayStruct->capacity *= 2;
+        IndexEntry* temp = (IndexEntry*)realloc(indexArrayStruct->indexArray, sizeof(IndexEntry*) * indexArrayStruct->capacity);
         if (temp == NULL)
           exit(-1);
         indexArrayStruct->indexArray = temp;
       }
-      for(i = indexArrayStruct->length-1; i > insertIndex; i--) {
-        indexArrayStruct->indexArray[i] = indexArrayStruct->indexArray[i-1];
+      for(int j = indexArrayStruct->length-1; j > insertIndex; j--) {
+        indexArrayStruct->indexArray[j] = indexArrayStruct->indexArray[j-1];
       } // we just moved everything forward one to make space for that one at insertIndex
-      IndexEntry newEntry = {}
-      indexArrayStruct->
-      create new indexEntry at insertIndex with newFile Offset
+      IndexEntry newEntry = {modPack->modPackArray[i]->id, newFileOffset};
+      indexArrayStruct->indexArray[insertIndex] = newEntry;
     }
   }
-  close data
-  open index
-  delete index.zn and dump the array in a new one.
-  close index
+  fclose(dataPtr);
+  FILE* indexPtr = fopen("index.zn", "wb");
+  indexFileWrite(indexPtr, indexArrayStruct);
+  fclose(indexPtr);
 }
 
 int getIDIndexForModPackages(IndexArray* indexArrayStruct, int id) {
@@ -470,9 +470,39 @@ void packageFileWrite(FILE* file, Package* package) {
   fwrite(&package->size, sizeof(Vector2), 1, file);
   fwrite(&package->id, sizeof(int), 1, file);
   fwrite(&package->numRelationships, sizeof(int), 1, file);
+  //same reason we had to write out packages, we also have to individually write out relationships struct
   fwrite(package->relationships, sizeof(Relationship) * package->numRelationships, 1, file); //no & same reason as above
   fwrite(&package->capacRelationships, sizeof(int), 1, file);
 }
+//oh no wait do i have to dereference relationship struct and write out those individual components????!!!
 
+void indexFileWrite(FILE* file, IndexArray* indexArr) {
+  fwrite(&indexArr->length, sizeof(int), 1, file); // & needed we need address to pass as pointer
+  fwrite(indexArr->indexArray, sizeof(IndexEntry) * indexArr->length, 1, file); //already a pointer no & needed
+  fwrite(&indexArr->capacity, sizeof(int), 1, file); // same as length
+}
+
+Package* packageRetrieval(int id, PackageStorage* storageArrayStruct) {
+   // gives location of package based on id whether it be one built for the session from disk or one stored in storage array.
+   //searches packagememory first if not there it checks disk and builds and returns pointer to new package built for this session.
+  // dont need to check modifiedpackages since all of those are already in packagememory itd be redudant
+  Package* package = (Package*)malloc(sizeof(Package));
+  if (package == NULL)
+    exit(1);
+  fread(&package->deleted, sizeof(bool), 1, file);
+  fread(&package->length, sizeof(int), 1, file);
+  malloc based on above
+  fread(package->buffer, sizeof(char*)* package->length, 1, file); //NOTE NO &, it is already a pointer
+  fread(&package->capacity, sizeof(int), 1, file);
+  fread(&package->location, sizeof(Vector2), 1, file);
+  fread(&package->size, sizeof(Vector2), 1, file);
+  fread(&package->id, sizeof(int), 1, file);
+  fread(&package->numRelationships, sizeof(int), 1, file);
+  malloc based above
+  fread(package->relationships, sizeof(Relationship) * package->numRelationships, 1, file); //no & same reason as above
+  fread(&package->capacRelationships, sizeof(int), 1, file);
+
+  return package;
+}
 //write a build package file that takes ID and then searches for it in current storage array
 //if not there it builds from disk
