@@ -32,11 +32,11 @@ typedef struct Package {
   int capacRelationships;
 } Package;
 
-typedef struct PackageStorage {
-  Package** storageArray;
+typedef struct PackageMemory {
+  Package** memoryArray;
   int length;
   int capacity;
-} PackageStorage;
+} PackageMemory;
 
 typedef struct ModifiedPackage {
   Package** modPackArray;
@@ -247,7 +247,75 @@ void drawBuffer(char* buffer, Vector2 curPos, int cellSize) {
   DrawTextEx(myFont, buffer, bottomPos, cellSize, 1, WORDS);
 }
 
-//Package Functions-----------------------------------------------------------------------------------------------
+//Package Search-----------------------------------------------------------------------------------------------
+Package* lookupPackageByLocation(HashMap* hashmap, Vector2 location) {
+    int index = hash(location.x, location.y, hashmap->size);
+    //do while executes at least once
+    int i = index;
+    do {
+      if(hashmap->hashArray[i] == NULL)
+        return NULL;
+      //need to check location to preven SEGFAULTING
+      else if ((hashmap->hashArray[i]->location.x == location.x) && (hashmap->hashArray[i]->location.y == location.y))
+        return hashmap->hashArray[i];
+      //this wraps around the array. notice how we use size since we want the full size not count
+      i = (i+1) % hashmap->size;
+    } while(i != index);
+
+    return NULL;
+}
+
+Package* lookupPackageByID(IndexArray* indexArrayStruct, int id, PackageStorage* storageArrayStruct) {
+   // gives location of package based on id whether it be one built for the session from disk or one stored in storage array.
+   //searches packagememory first if not there it checks disk and builds and returns pointer to new package built for this session.
+  // dont need to check modifiedpackages since all of those are already in packagememory itd be redudant
+
+  ONLY DO BELOW IF THERE IS NOTHING FOUND IN MEMORY. SO SEARCh MEMORY FOR THE package first.
+
+  FILE* data = fopen("data.zn", "rb");
+
+  int index = getIDIndexForModPackages(indexArrayStruct, id);
+  if (index < 0)
+    return NULL; //essnetially if there is no package with that id found return null
+  int fileOffset = indexArrayStruct->indexArray[index].fileOffset;
+  fseek(data, fileOffset, SEEK_SET); //essentialyl start at begnning and then go down the amount of file offset
+
+  Package* package = (Package*)malloc(sizeof(Package));
+  if (package == NULL)
+    exit(1);
+  fread(&package->deleted, sizeof(bool), 1, data);
+
+  fread(&package->length, sizeof(int), 1, data);
+  char* bufferAll = (char*)malloc(sizeof(char)*package->length);
+  if (bufferAll == NULL)
+    exit(1);
+  package->buffer = bufferAll;
+  fread(package->buffer, sizeof(char)* package->length, 1, data); //NOTE NO &, it is already a pointer
+  fread(&package->capacity, sizeof(int), 1, data);
+
+  fread(&package->location, sizeof(Vector2), 1, data);
+  fread(&package->size, sizeof(Vector2), 1, data);
+  fread(&package->id, sizeof(int), 1, data);
+
+  fread(&package->numRelationships, sizeof(int), 1, data);
+  Relationship* relArrayAll = (Relationship*)malloc(sizeof(Relationship)*package->numRelationships);//array of relationshios (NOT POINTER TO ARRAY which would be **Relationship)
+  //we can do sizeofrelationship times number because every relationship struct is the same size there is no variable lengths in it
+  if (relArrayAll == NULL)
+    exit(1);
+  package->relationships = relArrayAll;
+  fread(package->relationships, sizeof(Relationship) * package->numRelationships, 1, data); //no & same reason as above
+  fread(&package->capacRelationships, sizeof(int), 1, data);
+
+  return package;
+}
+
+//Package Storage Functions---------------------------------------------------------------------------------------------------------
+Package** savePackageMemory(Package** packages, int numPackages) {
+  returns the packages already in memory.
+  returns NULL if succesful.
+  instantiate Package** to the stack not heap.
+}
+
 void savePackage(Package* curP, PackageStorage* storray, HashMap* hashmap, IDPool* pool) {
     Package* existing = lookupPackage(hashmap, curP->location);
     if (existing != NULL) {
@@ -283,45 +351,30 @@ void savePackage(Package* curP, PackageStorage* storray, HashMap* hashmap, IDPoo
 }
 
 
-void insertPackage(HashMap* hashmap, Package* package) {
-    if (hashmap->count/0.7 >= hashmap->size) {
-      expandHash(hashmap);
+void savePackageLocationMap(HashMap* locmap, Package* package) {
+    if (locmap->count/0.7 >= locmap->size) {
+      expandHash(locmap);
     }
 
-    int index = hash(package->location.x, package->location.y, hashmap->size);
+    int index = hash(package->location.x, package->location.y, locmap->size);
     //do while executes at least once
     int i = index;
     do {
-      if (hashmap->hashArray[i] == NULL || hashmap->hashArray[i] == TOMBSTONE) {
-        hashmap->hashArray[i] = package;
-        hashmap->count++;
+      if (locmap->hashArray[i] == NULL || locmap->hashArray[i] == TOMBSTONE) {
+        locmap->hashArray[i] = package;
+        locmap->count++;
         return;
       }
       //this wraps around the array. notice how we use size since we want the full size not count
-      i = (i+1) % hashmap->size;
+      i = (i+1) % locmap->size;
     } while(i != index);
-    expandHash(hashmap);
-    insertPackage(hashmap, package);
+    expandHash(locmap);
+    insertPackage(locmap, package);
 }
 
-Package* lookupPackage(HashMap* hashmap, Vector2 location) {
-    int index = hash(location.x, location.y, hashmap->size);
-    //do while executes at least once
-    int i = index;
-    do {
-      if(hashmap->hashArray[i] == NULL)
-        return NULL;
-      //need to check location to preven SEGFAULTING
-      else if ((hashmap->hashArray[i]->location.x == location.x) && (hashmap->hashArray[i]->location.y == location.y))
-        return hashmap->hashArray[i];
-      //this wraps around the array. notice how we use size since we want the full size not count
-      i = (i+1) % hashmap->size;
-    } while(i != index);
-
-    return NULL;
-}
-
-void deletePackage(HashMap* hashmap, Vector2 location) {
+void saveModifiedPackage
+//Package Modification Functions-------------------------------------------------------------------------------------
+void deletePackageByLocation(HashMap* hashmap, Vector2 location) {
   int index = hash(location.x, location.y, hashmap->size);
   //DOuu WHILE EXECUTESu AT least once
   int i = index;
@@ -337,6 +390,12 @@ void deletePackage(HashMap* hashmap, Vector2 location) {
     i = (i+1) % hashmap->size;
     } while(i != index);
 }
+
+void deletePackageByID(int ID) {
+  shoudl essentially be a lookup by ID and get pointer to package
+  and then add that package pointer to modified packages. with bool deleted. HAVE THIS BE HANDLED IN the disksaving functions
+}
+
 
 //Renderer Functions---------------------------------------------------------------------------------------------
 void daRenderer(PackageStorage* pacStor, Vector2 cameraLoc, int cellSize) {
@@ -360,7 +419,7 @@ void daRenderer(PackageStorage* pacStor, Vector2 cameraLoc, int cellSize) {
 }
 
 //Hash Functions---------------------------------------------------------------------------------------------
-int hash(int x, int y, int size) {
+int hashLoc(int x, int y, int size) {
   return (x * 19 + y) % size;
 }
 
@@ -414,6 +473,11 @@ void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct) {
   for (int i = 0; i < modPack->length; i++) {
     fseek(data, 0, SEEK_END);
     newFileOffset = ftell(data);
+
+    //handle deleted pakcages that were deleted during that session meaning their deleted flag would already be flipped to 1.
+
+
+
     packageFileWrite(dataPtr, modPack->modPackArray[i]);
     int modPackageIndexInID = getIDIndexForModPackages(indexArrayStruct, modPack->modPackArray[i]->id);
     if (modPackageIndexInID >= 0) {
@@ -464,7 +528,7 @@ int getIDIndexForModPackages(IndexArray* indexArrayStruct, int id) {
 void packageFileWrite(FILE* file, Package* package) {
   fwrite(&package->deleted, sizeof(bool), 1, file);
   fwrite(&package->length, sizeof(int), 1, file);
-  fwrite(package->buffer, sizeof(char*)* package->length, 1, file); //NOTE NO &, it is already a pointer
+  fwrite(package->buffer, sizeof(char)*package->length, 1, file); //NOTE NO &, it is already a pointer
   fwrite(&package->capacity, sizeof(int), 1, file);
   fwrite(&package->location, sizeof(Vector2), 1, file);
   fwrite(&package->size, sizeof(Vector2), 1, file);
@@ -482,43 +546,3 @@ void indexFileWrite(FILE* file, IndexArray* indexArr) {
   fwrite(&indexArr->capacity, sizeof(int), 1, file); // same as length
 }
 
-Package* packageRetrieval(IndexArray* indexArrayStruct, int id, PackageStorage* storageArrayStruct) {
-   // gives location of package based on id whether it be one built for the session from disk or one stored in storage array.
-   //searches packagememory first if not there it checks disk and builds and returns pointer to new package built for this session.
-  // dont need to check modifiedpackages since all of those are already in packagememory itd be redudant
-  FILE* data = fopen("data.zn", "WHAT MODE IDK");
-
-  int index = getIDIndexForModPackages(indexArrayStruct, id);
-  int fileOffset = indexArrayStruct->indexArray[index].fileOffset;
-  fseek(data, fileOffset, SEEK_SET); //essentialyl start at begnning and then go down the amount of file offset
-
-  Package* package = (Package*)malloc(sizeof(Package));
-  if (package == NULL)
-    exit(1);
-  fread(&package->deleted, sizeof(bool), 1, file);
-
-  fread(&package->length, sizeof(int), 1, file);
-  char* bufferAll = (char*)malloc(sizeof(char)*package->length);
-  if (bufferAll == NULL)
-    exit(1);
-  package->buffer = bufferAll;
-  fread(package->buffer, sizeof(char*)* package->length, 1, file); //NOTE NO &, it is already a pointer
-  fread(&package->capacity, sizeof(int), 1, file);
-
-  fread(&package->location, sizeof(Vector2), 1, file);
-  fread(&package->size, sizeof(Vector2), 1, file);
-  fread(&package->id, sizeof(int), 1, file);
-
-  fread(&package->numRelationships, sizeof(int), 1, file);
-  Relationship* relArrayAll = (Relationship*)malloc(sizeof(Relationship)*package->numRelationships);//array of relationshios (NOT POINTER TO ARRAY which would be **Relationship)
-  //we can do sizeofrelationship times number because every relationship struct is the same size there is no variable lengths in it
-  if (relArrayAll == NULL)
-    exit(1);
-  package->relationships = relArrayAll;
-  fread(package->relationships, sizeof(Relationship) * package->numRelationships, 1, file); //no & same reason as above
-  fread(&package->capacRelationships, sizeof(int), 1, file);
-
-  return package;
-}
-//write a build package file that takes ID and then searches for it in current storage array
-//if not there it builds from disk
