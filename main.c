@@ -55,11 +55,22 @@ typedef struct IndexArray {
   int capacity;
 } IndexArray;
 
-typedef struct HashMap {
+typedef struct HashMapLoc {
   Package** hashArray;
   int size;
   int count;
 } HashMap;
+
+typedef struct Node {
+  Package* package; //no key needed bevayse package id is a key
+  struct Node* next;
+} Node;
+
+typedef struct HashMapID {
+  Node** buckets;
+  int capacity;
+  int length;
+} HashMapID;
 
 typedef struct IDPool {
     int* returnedIDs;
@@ -265,13 +276,19 @@ Package* lookupPackageByLocation(HashMap* hashmap, Vector2 location) {
     return NULL;
 }
 
-Package* lookupPackageByID(IndexArray* indexArrayStruct, int id, PackageStorage* storageArrayStruct) {
-   // gives location of package based on id whether it be one built for the session from disk or one stored in storage array.
-   //searches packagememory first if not there it checks disk and builds and returns pointer to new package built for this session.
-  // dont need to check modifiedpackages since all of those are already in packagememory itd be redudant
+Package* lookupPackageOrIndexByID(int id, HashMapID* hashmap) {
+  index = hashID(id, hashmap->capacity);
 
-  ONLY DO BELOW IF THERE IS NOTHING FOUND IN MEMORY. SO SEARCh MEMORY FOR THE package first.
+  Node* currNode = hashmap->buckets[index];
+  while (currNode != NULL) {
+    if (currNode->package->id == id) {
+      return currNode->package;
+    }
+    currNode = currNode->next;
+  }
+}
 
+Package* buildPackageByID(IndexArray* indexArrayStruct, int id, PackageStorage* storageArrayStruct) {
   FILE* data = fopen("data.zn", "rb");
 
   int index = getIDIndexForModPackages(indexArrayStruct, id);
@@ -310,10 +327,20 @@ Package* lookupPackageByID(IndexArray* indexArrayStruct, int id, PackageStorage*
 }
 
 //Package Storage Functions---------------------------------------------------------------------------------------------------------
-Package** savePackageMemory(Package** packages, int numPackages) {
-  returns the packages already in memory.
-  returns NULL if succesful.
-  instantiate Package** to the stack not heap.
+void savePackageMemory(Package** packages, int numPackages, HashMapID* hashmap) {
+  if (hashmap->length /(float)hashmap->capacity > 0.7) //if exceed load factor just make it bigger. also integer division truncation
+    expandHashID(hashmap);
+
+  int index;
+  for(int i = 0; i < numPackages; i++) {
+    index = hashID(packages[i]->id, hashmap->capacity);
+    if(lookupPackageOrIndexByID(memory, packages[i]->id, hashmap) == NULL) continue;
+
+    Node* newNode = malloc(sizeof(Node));
+    newNode->package = packages[i];
+    newNode->next = hashmap->buckets[index]; // point to current head
+    hashmap->buckets[index] = newNode;       // new node becomes head
+  }
 }
 
 void savePackage(Package* curP, PackageStorage* storray, HashMap* hashmap, IDPool* pool) {
@@ -349,7 +376,6 @@ void savePackage(Package* curP, PackageStorage* storray, HashMap* hashmap, IDPoo
 
     insertPackage(hashmap, savePac);
 }
-
 
 void savePackageLocationMap(HashMap* locmap, Package* package) {
     if (locmap->count/0.7 >= locmap->size) {
@@ -419,11 +445,11 @@ void daRenderer(PackageStorage* pacStor, Vector2 cameraLoc, int cellSize) {
 }
 
 //Hash Functions---------------------------------------------------------------------------------------------
-int hashLoc(int x, int y, int size) {
-  return (x * 19 + y) % size;
+int hashLoc(int x, int y, int capacity) {
+  return (x * 19 + y) % capacity;
 }
 
-void expandHash(HashMap* hashmap) {
+void expandHashLoc(HashMapLoc* hashmap) {
   hashmap->size *= 2;
   //cant do realloc i need to do malloc then free wiht a move in between
   Package** temp = (Package**)malloc(sizeof(Package*) * hashmap->size);
@@ -439,6 +465,33 @@ void expandHash(HashMap* hashmap) {
       insertPackage(hashmap, middleman[i]);
   }
   free(middleman);
+}
+
+int hashID(int id, int capacity) {
+  return id % capacity;
+}
+
+void expandHashID(HashMapID* hashmap) {
+  hashmap->capacity *= 2;
+
+  Node** newBuckets = malloc(sizeof(Node*) * hashmap->capacity);
+  if (newBuckets == NULL)
+    exit(1);
+  // very cool logic so we have for loop to iterate through every bucket and then while loop to go till it hits end
+  for (int i = 0; i < hashmap->capacity/2; i++) {
+    Node* currNode = hashmap->buckets[i];
+    while (currNode != NULL) {
+      Node* nextNode = currNode->next;
+      int newIndex = hashID(currNode->package->id, hashmap->capacity);
+
+      currNode->next = newBuckets[newIndex];
+      newBuckets[newIndex] = currNode;
+
+      currNode = nextNode;
+    }
+  }
+  free(hashmap->buckets);
+  hashmap->buckets = newBuckets;
 }
 
 //Data Functions---------------------------------------------------------------------------------------------
