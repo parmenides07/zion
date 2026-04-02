@@ -39,7 +39,7 @@ typedef struct PackageMemory {
 } PackageMemory;
 
 typedef struct ModifiedPackage {
-  Package** modPackArray;
+  int* ids;
   int length;
   int capacity;
 } ModifiedPackage;
@@ -59,7 +59,7 @@ typedef struct HashMapLoc {
   Package** hashArray;
   int size;
   int count;
-} HashMap;
+} HashMapLoc;
 
 typedef struct Node {
   Package* package; //no key needed bevayse package id is a key
@@ -94,24 +94,6 @@ typedef struct IDPool {
 
 Font myFont;
 
-int newBuffer(Package* curP);
-int writeBuffer(Package* curP, int input);
-void savePackage(Package* curP, PackageStorage* storray, HashMap* hashmap, IDPool* pool);
-void drawBuffer(char* buffer, Vector2 curPos, int cellSize);
-int hash(int x, int y, int size);
-void expandHash(HashMap* hashmap);
-IDPool newIDPool();
-int acquireID(IDPool* pool);
-void releaseID(IDPool* pool, int id);
-//cameraloc refers to the location or offset and cellsize is set by zooming
-void daRenderer(PackageStorage* pacStor, Vector2 cameraLoc, int cellSize);
-void insertPackage(HashMap* map, Package* package);
-Package* lookupPackage(HashMap* map, Vector2 location);
-void deletePackage(HashMap* map, Vector2 location);
-int getIDIndexForModPackages(IndexArray* indexArrayStruct, int id);
-void packageFileWrite(FILE* file, Package* package);
-void indexFileWrite(FILE* file, IndexArray* indexArr);
-
 int main(void) {
   InitWindow(1200, 1200, "zion");
   myFont = LoadFontEx(FONTIWANT, 128, NULL, 0);
@@ -137,8 +119,8 @@ int main(void) {
 
 
 
-  HashMap hashmap = {NULL, 16, 0};
-  hashmap.hashArray = (Package**)calloc(hashmap.size, sizeof(Package*));
+  HashMapLoc hashmaploc = {NULL, 16, 0}
+  hashmaploc.hashArray = (Package**)calloc(hashmaploc.size, sizeof(Package*));
 
   while (!WindowShouldClose()) {
     BeginDrawing();
@@ -259,27 +241,27 @@ void drawBuffer(char* buffer, Vector2 curPos, int cellSize) {
 }
 
 //Package Search-----------------------------------------------------------------------------------------------
-Package* lookupPackageByLocation(HashMap* hashmap, Vector2 location) {
-    int index = hash(location.x, location.y, hashmap->size);
+Package* lookupPackageByLocation(HashMapLoc* locmap, Vector2 location) {
+    int index = hashLoc(location.x, location.y, locmap->size);
     //do while executes at least once
     int i = index;
     do {
-      if(hashmap->hashArray[i] == NULL)
+      if(locmap->hashArray[i] == NULL)
         return NULL;
       //need to check location to preven SEGFAULTING
-      else if ((hashmap->hashArray[i]->location.x == location.x) && (hashmap->hashArray[i]->location.y == location.y))
-        return hashmap->hashArray[i];
+      else if ((locmap->hashArray[i]->location.x == location.x) && (locmap->hashArray[i]->location.y == location.y))
+        return locmap->hashArray[i];
       //this wraps around the array. notice how we use size since we want the full size not count
-      i = (i+1) % hashmap->size;
+      i = (i+1) % locmap->size;
     } while(i != index);
 
     return NULL;
 }
 
-Package* lookupPackageOrIndexByID(int id, HashMapID* hashmap) {
-  index = hashID(id, hashmap->capacity);
+Package* lookupPackageByID(int id, HashMapID* idmap) {
+  index = hashID(id, idmap->capacity);
 
-  Node* currNode = hashmap->buckets[index];
+  Node* currNode = idmap->buckets[index];
   while (currNode != NULL) {
     if (currNode->package->id == id) {
       return currNode->package;
@@ -327,59 +309,41 @@ Package* buildPackageByID(IndexArray* indexArrayStruct, int id, PackageStorage* 
 }
 
 //Package Storage Functions---------------------------------------------------------------------------------------------------------
-void savePackageMemory(Package** packages, int numPackages, HashMapID* hashmap) {
-  if (hashmap->length /(float)hashmap->capacity > 0.7) //if exceed load factor just make it bigger. also integer division truncation
-    expandHashID(hashmap);
+void savePackageMemory(Package** packages, int numPackages, HashMapID* idmap) {
+  if (idmap->length /(float)idmap->capacity > 0.7) //if exceed load factor just make it bigger. also integer division truncation
+    expandHashID(idmap);
 
   int index;
   for(int i = 0; i < numPackages; i++) {
-    index = hashID(packages[i]->id, hashmap->capacity);
-    if(lookupPackageOrIndexByID(memory, packages[i]->id, hashmap) == NULL) continue;
+    index = hashID(packages[i]->id, idmap->capacity);
+    if(lookupPackageByID(packages[i]->id, idmap) == NULL) continue;
 
     Node* newNode = malloc(sizeof(Node));
     newNode->package = packages[i];
-    newNode->next = hashmap->buckets[index]; // point to current head
-    hashmap->buckets[index] = newNode;       // new node becomes head
+    newNode->next = idmap->buckets[index]; // point to current head
+    idmap->buckets[index] = newNode;       // new node becomes head
   }
 }
 
-void savePackage(Package* curP, PackageStorage* storray, HashMap* hashmap, IDPool* pool) {
-    Package* existing = lookupPackage(hashmap, curP->location);
-    if (existing != NULL) {
-        releaseID(pool, existing->id);
-        free(existing->buffer);
-        storray->storageArray[existing->id] = NULL;
-        deletePackage(hashmap, existing->location);
-        free(existing);
-    }
-
+void savePackageHandler(Package* curP, PackageStorage* storray, HashMapLoc* locmap, HashMapID* idmap) {
     Package* savePac = (Package*)malloc(sizeof(Package));
     if (savePac == NULL)
         exit(1);
 
     memcpy(savePac, curP, sizeof(Package));
-    savePac->buffer = strdup(curP->buffer);
+    savePac->buffer = strdup(curP->buffer); // why strdup i thought we copied curp?
     savePac->id = acquireID(pool);
 
-    // grow storageArray if the new id exceeds capacity
-    while (savePac->id >= storray->capacity) {
-        storray->capacity *= 2;
-        Package** temp = (Package**)realloc(storray->storageArray, sizeof(Package*) * storray->capacity);
-        if (temp == NULL)
-            exit(1);
-        storray->storageArray = temp;
-    }
+    Package**
+    make array of that one package
+    pass that to savePackageMemory
 
-    storray->storageArray[savePac->id] = savePac;
-    if (savePac->id >= storray->length)
-        storray->length = savePac->id + 1;
-
-    insertPackage(hashmap, savePac);
+    savePackageLocationMap(locmap, savePac);
 }
 
-void savePackageLocationMap(HashMap* locmap, Package* package) {
+void savePackageLocationMap(HashMapLoc* locmap, Package* package) {
     if (locmap->count/0.7 >= locmap->size) {
-      expandHash(locmap);
+      expandHashLoc(locmap);
     }
 
     int index = hash(package->location.x, package->location.y, locmap->size);
@@ -394,26 +358,27 @@ void savePackageLocationMap(HashMap* locmap, Package* package) {
       //this wraps around the array. notice how we use size since we want the full size not count
       i = (i+1) % locmap->size;
     } while(i != index);
-    expandHash(locmap);
-    insertPackage(locmap, package);
+    expandHashLoc(locmap);
 }
 
+//for the below rather than storing pointer to package could we just use the straight up id, that would be better no?
+//we dont even need to really sort this by id either, Only add it if that id already dosent exist in the array.
 void saveModifiedPackage
 //Package Modification Functions-------------------------------------------------------------------------------------
-void deletePackageByLocation(HashMap* hashmap, Vector2 location) {
-  int index = hash(location.x, location.y, hashmap->size);
+void deletePackageByLocation(HashMapLoc* locmap, Vector2 location) {
+  int index = hash(location.x, location.y, locmap->size);
   //DOuu WHILE EXECUTESu AT least once
   int i = index;
   do {
-    if(hashmap->hashArray[i] == NULL)
+    if(locmap->hashArray[i] == NULL)
       return;
-    else if ((hashmap->hashArray[i]->location.x == location.x) && (hashmap->hashArray[i]->location.y == location.y)) {
-      hashmap->hashArray[i] = (Package*)1;
-      hashmap->count--;
+    else if ((locmap->hashArray[i]->location.x == location.x) && (locmap->hashArray[i]->location.y == location.y)) {
+      locmap->hashArray[i] = (Package*)1;
+      locmap->count--;
       return;
     }
     //this wraps around the array. notice how we use size since we want the full size not count
-    i = (i+1) % hashmap->size;
+    i = (i+1) % jmap->size;
     } while(i != index);
 }
 
@@ -449,20 +414,20 @@ int hashLoc(int x, int y, int capacity) {
   return (x * 19 + y) % capacity;
 }
 
-void expandHashLoc(HashMapLoc* hashmap) {
-  hashmap->size *= 2;
+void expandHashLoc(HashMapLoc* locmap) {
+  locmap->size *= 2;
   //cant do realloc i need to do malloc then free wiht a move in between
-  Package** temp = (Package**)malloc(sizeof(Package*) * hashmap->size);
+  Package** temp = (Package**)malloc(sizeof(Package*) * locmap->size);
   if (temp == NULL)
     exit(1);
 
-  Package** middleman = hashmap->hashArray;
-  hashmap->hashArray = temp;
+  Package** middleman = locmap->hashArray;
+  locmap->hashArray = temp;
 
   //use size since we want to go through the entire array(if we going through all we have to check null or tombstone to make sure we dont pull a nonexistant package)
-  for (int i = 0; i < hashmap->size/2; i++) {
+  for (int i = 0; i < locmap->size/2; i++) {
     if(!(middleman[i] == NULL || middleman[i] == TOMBSTONE))
-      insertPackage(hashmap, middleman[i]);
+      insertPackage(locmap, middleman[i]);
   }
   free(middleman);
 }
@@ -471,18 +436,18 @@ int hashID(int id, int capacity) {
   return id % capacity;
 }
 
-void expandHashID(HashMapID* hashmap) {
-  hashmap->capacity *= 2;
+void expandHashID(HashMapID* idmap) {
+  idmap->capacity *= 2;
 
-  Node** newBuckets = malloc(sizeof(Node*) * hashmap->capacity);
+  Node** newBuckets = malloc(sizeof(Node*) * idmap->capacity);
   if (newBuckets == NULL)
     exit(1);
   // very cool logic so we have for loop to iterate through every bucket and then while loop to go till it hits end
-  for (int i = 0; i < hashmap->capacity/2; i++) {
-    Node* currNode = hashmap->buckets[i];
+  for (int i = 0; i < idmap->capacity/2; i++) {
+    Node* currNode = idmap->buckets[i];
     while (currNode != NULL) {
       Node* nextNode = currNode->next;
-      int newIndex = hashID(currNode->package->id, hashmap->capacity);
+      int newIndex = hashID(currNode->package->id, idmap->capacity);
 
       currNode->next = newBuckets[newIndex];
       newBuckets[newIndex] = currNode;
@@ -490,8 +455,8 @@ void expandHashID(HashMapID* hashmap) {
       currNode = nextNode;
     }
   }
-  free(hashmap->buckets);
-  hashmap->buckets = newBuckets;
+  free(idmap->buckets);
+  idmap->buckets = newBuckets;
 }
 
 //Data Functions---------------------------------------------------------------------------------------------
@@ -516,7 +481,7 @@ void pullindexes(IndexArray* indexArrayStruct) {
   }
 }
 
-void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct) {
+void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct, HashMapID* idmap) {
   int fileIndex;
   FILE* dataPtr;
   long newFileOffset;
@@ -531,8 +496,8 @@ void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct) {
 
 
 
-    packageFileWrite(dataPtr, modPack->modPackArray[i]);
-    int modPackageIndexInID = getIDIndexForModPackages(indexArrayStruct, modPack->modPackArray[i]->id);
+    packageFileWrite(dataPtr, lookupPackageByID(modPack->ids[i], idmap));
+    int modPackageIndexInID = getIDIndexForModPackages(indexArrayStruct, modPack->ids[i]);
     if (modPackageIndexInID >= 0) {
       fseek(data, indexArrayStruct->indexArray[modPackageIndexInID].fileOffset, SEEK_SET);
       fwrite(&deleted, sizeof(int), 1, data);
