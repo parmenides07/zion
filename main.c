@@ -79,6 +79,11 @@ typedef struct IDPool {
     int nextFresh;
 } IDPool;
 
+typedef struct Scope {
+  Package** viewablePackages;
+  int length;
+  int capacity;
+} Scope;
 
 /*
 #define TEXTBOX ((Color){255,49,46,255})
@@ -91,6 +96,32 @@ typedef struct IDPool {
 #define BACKGROUND ((Color){70, 52, 48, 255})   // muted cocoa
 #define WORDS ((Color){38, 32, 30, 255})        // deep ink
 #define FONTIWANT "Heming.ttf"
+
+IDPool newIDPool();
+int acquireID(IDPool* pool);
+void releaseID(IDPool* pool, int id);
+int newBuffer(Package* curP);
+int writeBuffer(Package* curP, int input);
+void drawBuffer(char* buffer, Vector2 curPos, int cellSize) {
+Package* lookupPackageByLocation(HashMapLoc* locmap, Vector2 location) {
+Package* lookupPackageByID(int id, HashMapID* idmap) {
+Package* buildPackageByID(IndexArray* indexArrayStruct, int id, PackageStorage* storageArrayStruct) {
+void savePackageMemory(Package** packages, int numPackages, HashMapID* idmap) {
+void savePackageHandler(Package* curP, PackageStorage* storray, HashMapLoc* locmap, HashMapID* idmap) {
+void savePackageLocationMap(HashMapLoc* locmap, Package* package)
+void saveModifiedPackage
+void deletePackageByLocation(HashMapLoc* locmap, Vector2 location) {
+void deletePackageByID(int ID) {
+void daRenderer(PackageStorage* pacStor, Vector2 cameraLoc, int cellSize) {
+int hashLoc(int x, int y, int capacity) {
+void expandHashLoc(HashMapLoc* locmap) {
+int hashID(int id, int capacity) {
+void expandHashID(HashMapID* idmap) {
+void pullindexes(IndexArray* indexArrayStruct) {
+void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct, HashMapID* idmap) {
+int getIDIndexForModPackages(IndexArray* indexArrayStruct, int id) {
+void packageFileWrite(FILE* file, Package* package) {
+void indexFileWrite(FILE* file, IndexArray* indexArr) {
 
 Font myFont;
 
@@ -268,9 +299,10 @@ Package* lookupPackageByID(int id, HashMapID* idmap) {
     }
     currNode = currNode->next;
   }
+  return NULL;
 }
 
-Package* buildPackageByID(IndexArray* indexArrayStruct, int id, PackageStorage* storageArrayStruct) {
+Package* buildPackageByID(IndexArray* indexArrayStruct, int id) {
   FILE* data = fopen("data.zn", "rb");
 
   int index = getIDIndexForModPackages(indexArrayStruct, id);
@@ -325,7 +357,7 @@ void savePackageMemory(Package** packages, int numPackages, HashMapID* idmap) {
   }
 }
 
-void savePackageHandler(Package* curP, PackageStorage* storray, HashMapLoc* locmap, HashMapID* idmap) {
+void savePackageHandler(Package* curP, PackageStorage* storray, HashMapLoc* locmap, HashMapID* idmap, IDPool* pool) {
     Package* savePac = (Package*)malloc(sizeof(Package));
     if (savePac == NULL)
         exit(1);
@@ -334,9 +366,8 @@ void savePackageHandler(Package* curP, PackageStorage* storray, HashMapLoc* locm
     savePac->buffer = strdup(curP->buffer); // why strdup i thought we copied curp?
     savePac->id = acquireID(pool);
 
-    Package**
-    make array of that one package
-    pass that to savePackageMemory
+    Package** packagePass = [package];
+    savePackageMemory(packagePass, 1, idmap);
 
     savePackageLocationMap(locmap, savePac);
 }
@@ -346,7 +377,7 @@ void savePackageLocationMap(HashMapLoc* locmap, Package* package) {
       expandHashLoc(locmap);
     }
 
-    int index = hash(package->location.x, package->location.y, locmap->size);
+    int index = hashLoc(package->location.x, package->location.y, locmap->size);
     //do while executes at least once
     int i = index;
     do {
@@ -366,7 +397,7 @@ void savePackageLocationMap(HashMapLoc* locmap, Package* package) {
 void saveModifiedPackage
 //Package Modification Functions-------------------------------------------------------------------------------------
 void deletePackageByLocation(HashMapLoc* locmap, Vector2 location) {
-  int index = hash(location.x, location.y, locmap->size);
+  int index = hashLoc(location.x, location.y, locmap->size);
   //DOuu WHILE EXECUTESu AT least once
   int i = index;
   do {
@@ -378,7 +409,7 @@ void deletePackageByLocation(HashMapLoc* locmap, Vector2 location) {
       return;
     }
     //this wraps around the array. notice how we use size since we want the full size not count
-    i = (i+1) % jmap->size;
+    i = (i+1) % locmap->size;
     } while(i != index);
 }
 
@@ -389,21 +420,21 @@ void deletePackageByID(int ID) {
 
 
 //Renderer Functions---------------------------------------------------------------------------------------------
-void daRenderer(PackageStorage* pacStor, Vector2 cameraLoc, int cellSize) {
+void daRenderer(Scope* packages, Vector2 cameraLoc, int cellSize) {
   Vector2 screenRelPos;
-  for (int i = 0; i < pacStor->length; i++) {
+  for (int i = 0; i < packages->length; i++) {
     //printf("rendering package: %s at %f %f\n", pacStor->storageArray[i]->buffer, cameraLoc.x, cameraLoc.y);
-    if (pacStor->storageArray[i] == NULL)  // add this
+    if (packages->viewablePackages[i] == NULL)  // add this
         continue;
 
-    screenRelPos.x = (pacStor->storageArray[i]->location.x - cameraLoc.x) * cellSize;
-    screenRelPos.y = (pacStor->storageArray[i]->location.y - cameraLoc.y) * cellSize;
+    screenRelPos.x = (packages->viewablePackages[i]->location.x - cameraLoc.x) * cellSize;
+    screenRelPos.y = (packages->viewablePackages[i]->location.y - cameraLoc.y) * cellSize;
 
     //righgt edge greater than 0?, left edge grearter than horizontal max?
-    if (screenRelPos.x + MeasureText(pacStor->storageArray[i]->buffer, cellSize) >= 0 && screenRelPos.x <= GetScreenWidth()) {
+    if (screenRelPos.x + MeasureText(packages->viewablePackages[i]->buffer, cellSize) >= 0 && screenRelPos.x <= GetScreenWidth()) {
       if (screenRelPos.y >= 0 && screenRelPos.y <= GetScreenHeight()) {
-        DrawRectangle(screenRelPos.x, screenRelPos.y - cellSize/15, MeasureTextEx(myFont, pacStor->storageArray[i]->buffer, cellSize, 1).x, cellSize, TEXTBOX);
-        DrawTextEx(myFont, pacStor->storageArray[i]->buffer, screenRelPos, cellSize, 1, WORDS);
+        DrawRectangle(screenRelPos.x, screenRelPos.y - cellSize/15, MeasureTextEx(myFont, packages->viewablePackages[i]->buffer, cellSize, 1).x, cellSize, TEXTBOX);
+        DrawTextEx(myFont, packages->viewablePackages[i]->buffer, screenRelPos, cellSize, 1, WORDS);
       }
     }
   }
@@ -427,7 +458,7 @@ void expandHashLoc(HashMapLoc* locmap) {
   //use size since we want to go through the entire array(if we going through all we have to check null or tombstone to make sure we dont pull a nonexistant package)
   for (int i = 0; i < locmap->size/2; i++) {
     if(!(middleman[i] == NULL || middleman[i] == TOMBSTONE))
-      insertPackage(locmap, middleman[i]);
+      savePackageLocationMap(locmap, middleman[i])
   }
   free(middleman);
 }
@@ -515,7 +546,7 @@ void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct, HashMapID*
       for(int j = indexArrayStruct->length-1; j > insertIndex; j--) {
         indexArrayStruct->indexArray[j] = indexArrayStruct->indexArray[j-1];
       } // we just moved everything forward one to make space for that one at insertIndex
-      IndexEntry newEntry = {modPack->modPackArray[i]->id, newFileOffset};
+      IndexEntry newEntry = {modPack->ids[i], newFileOffset};
       indexArrayStruct->indexArray[insertIndex] = newEntry;
     }
   }
