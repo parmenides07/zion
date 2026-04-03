@@ -32,12 +32,6 @@ typedef struct Package {
   int capacRelationships;
 } Package;
 
-typedef struct PackageMemory {
-  Package** memoryArray;
-  int length;
-  int capacity;
-} PackageMemory;
-
 typedef struct ModifiedPackage {
   int* ids;
   int length;
@@ -96,32 +90,33 @@ typedef struct Scope {
 #define BACKGROUND ((Color){70, 52, 48, 255})   // muted cocoa
 #define WORDS ((Color){38, 32, 30, 255})        // deep ink
 #define FONTIWANT "Heming.ttf"
+#define MAXSELECTIONS 64
 
 IDPool newIDPool();
 int acquireID(IDPool* pool);
 void releaseID(IDPool* pool, int id);
 int newBuffer(Package* curP);
 int writeBuffer(Package* curP, int input);
-void drawBuffer(char* buffer, Vector2 curPos, int cellSize) {
-Package* lookupPackageByLocation(HashMapLoc* locmap, Vector2 location) {
-Package* lookupPackageByID(int id, HashMapID* idmap) {
-Package* buildPackageByID(IndexArray* indexArrayStruct, int id, PackageStorage* storageArrayStruct) {
-void savePackageMemory(Package** packages, int numPackages, HashMapID* idmap) {
-void savePackageHandler(Package* curP, PackageStorage* storray, HashMapLoc* locmap, HashMapID* idmap) {
-void savePackageLocationMap(HashMapLoc* locmap, Package* package)
-void saveModifiedPackage
-void deletePackageByLocation(HashMapLoc* locmap, Vector2 location) {
-void deletePackageByID(int ID) {
-void daRenderer(PackageStorage* pacStor, Vector2 cameraLoc, int cellSize) {
-int hashLoc(int x, int y, int capacity) {
-void expandHashLoc(HashMapLoc* locmap) {
-int hashID(int id, int capacity) {
-void expandHashID(HashMapID* idmap) {
-void pullindexes(IndexArray* indexArrayStruct) {
-void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct, HashMapID* idmap) {
-int getIDIndexForModPackages(IndexArray* indexArrayStruct, int id) {
-void packageFileWrite(FILE* file, Package* package) {
-void indexFileWrite(FILE* file, IndexArray* indexArr) {
+void drawBuffer(char* buffer, Vector2 curPos, int cellSize);
+Package* lookupPackageByLocation(HashMapLoc* locmap, Vector2 location);
+Package* lookupPackageByID(int id, HashMapID* idmap);
+Package* buildPackageByID(IndexArray* indexArrayStruct, int id);
+void savePackageMemory(Package** packages, int numPackages, HashMapID* idmap);
+void savePackageHandler(Package* curP, HashMapLoc* locmap, HashMapID* packageMemory, IDPool* pool);
+void savePackageLocationMap(HashMapLoc* locmap, Package* package);
+void saveModifiedPackage;
+void deletePackageByLocation(HashMapLoc* locmap, Vector2 location);
+void deletePackageByID(int ID);
+void daRenderer(Scope* packages, Vector2 cameraLoc, int cellSize);
+int hashLoc(int x, int y, int capacity);
+void expandHashLoc(HashMapLoc* locmap);
+int hashID(int id, int capacity);
+void expandHashID(HashMapID* idmap);
+void pullindexes(IndexArray* indexArrayStruct);
+void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct, HashMapID* idmap);
+int getIDIndexForModPackages(IndexArray* indexArrayStruct, int id);
+void packageFileWrite(FILE* file, Package* package);
+void indexFileWrite(FILE* file, IndexArray* indexArr);
 
 Font myFont;
 
@@ -132,25 +127,21 @@ int main(void) {
 
   int key = 0;
   //Vector2 lastPosition = {0.0f,0.0f};
-  Package curPack = {false, NULL,{0.0f,0.0f},{0,0}, 0, 16, 0, NULL};
-  PackageStorage storage = {NULL, 0, 16};
+  Package curPack = {"false", 0, NULL, 0, {0.0f, 0.0f}, 0, 0, 0, 0, NULL, 0};
   Vector2 currentPosition = {0.0f, 0.0f};
   Vector2 cameraLocation = {0.0f, 0.0f};
+  HashMapID packageMemory;
   IDPool idPool = newIDPool();
   int cellsize = 20;
-
-  if(newBuffer(&curPack) == 0)
-    exit(1);
-  //need to fill that null pointer with something before it starts.
-  storage.storageArray = (Package**)malloc(sizeof(Package*)*storage.capacity);
-
-
+  Package* selected[MAXSELECTIONS] = {NULL};
+  int selectedCount = 0;
+  bool writingNewBuffer = false;
 
 // RENAMAE PACKAGESTORAGE TO PACKAGE MEMORY all working packages. MAKE IT A HASHMAP BY INDEX
 
 
 
-  HashMapLoc hashmaploc = {NULL, 16, 0}
+  HashMapLoc hashmaploc = {NULL, 16, 0};
   hashmaploc.hashArray = (Package**)calloc(hashmaploc.size, sizeof(Package*));
 
   while (!WindowShouldClose()) {
@@ -168,26 +159,59 @@ int main(void) {
     currentPosition.x = GetMousePosition().x / cellsize;
     currentPosition.y = GetMousePosition().y / cellsize;
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-            //write functiont o save current buffer
-        curPack.location = currentPosition;
-        savePackage(&curPack, &storage, &hashmap, &idPool);
-        free(curPack.buffer);
-        curPack.capacity = 16;
-        curPack.size.x = 0.0;
-        curPack.size.y = 0.0;
-        curPack.length = 0;
+        Vector2 clickPos;
+        clickPos.x = (int)(GetMousePosition().x / cellsize) + cameraLocation.x;
+        clickPos.y = (int)(GetMousePosition().y / cellsize) + cameraLocation.y;
+
+        if (writingNewBuffer) {
+          curPack.location = clickPos;
+          savePackageHandler(&curPack, ...);
+          writingNewBuffer = false;
+        }
+        else if (????) {
+            instantiate a new package
+
+            curPack.location = currentPosition;
+            savePackage(&curPack, &storage, &hashmap, &idPool);
+            free(curPack.buffer);
+            YOYOMA PUT ALL OF THE FOLLOWNIG INTO AN INITIALIZE PACKAGE THING and we just pass curpack into there.
+            curPack.capacity = 16;
+            curPack.size.x = 0.0;
+            curPack.size.y = 0.0;
+            curPack.length = 0;
+        }
+        else {
+            curPack = lookupPackageByLocation(&hashmaploc, clickPos);
+
+            if (hit == NULL) {
+                // save all currently selected packages
+                for (int i = 0; i < selectedCount; i++)
+                    savePackageHandler(selected[i], ...);
+                selectedCount = 0;
+            }
         if(newBuffer(&curPack) == 0)
             exit(1);
+            } else {
+                if (IsKeyDown(KEY_LEFT_SHIFT) && selectedCount < MAXSELECTIONS) { //run condition remember must be < not <= cant let it run that last time when it is equal will add 1 cmon
+                    selected[selectedCount++] = &curPack;
+                    curPack = hit;
+                } else {
+                    for (int i = 0; i < selectedCount; i++)
+                        savePackageHandler(selected[i], ...);
+                    selectedCount = 0;
+                    selected[selectedCount++] = &curPack;
+                }
+            }
+            modifiied package will be added in the save package because that is the one chokepoint where al lof the packages will go from above no need to add to modified each time just put it in save
+        }
+    }
+    if (IsKeyPressed(KEY_ENTER)) {
+      writingNewBuffer = true;
     }
     if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
       cameraLocation.x -= GetMouseDelta().x / cellsize;
       cameraLocation.y -= GetMouseDelta().y / cellsize;
     }
-    cellsize += GetMouseWheelMove() * 3;
-    if(cellsize < 5)
-      cellsize = 5;
-    if(cellsize > 100)
-      cellsize = 100;
     key = 0;
     EndDrawing();
    }
@@ -348,7 +372,7 @@ void savePackageMemory(Package** packages, int numPackages, HashMapID* idmap) {
   int index;
   for(int i = 0; i < numPackages; i++) {
     index = hashID(packages[i]->id, idmap->capacity);
-    if(lookupPackageByID(packages[i]->id, idmap) == NULL) continue;
+    if(lookupPackageByID(packages[i]->id, idmap) != NULL) continue;
 
     Node* newNode = malloc(sizeof(Node));
     newNode->package = packages[i];
@@ -357,7 +381,10 @@ void savePackageMemory(Package** packages, int numPackages, HashMapID* idmap) {
   }
 }
 
-void savePackageHandler(Package* curP, PackageStorage* storray, HashMapLoc* locmap, HashMapID* idmap, IDPool* pool) {
+void savePackageHandler(Package* curP, HashMapLoc* locmap, HashMapID* packageMemory, IDPool* pool) {
+
+    ADD TO MODIFIED PACAKGE WITH EVERY PACKAGE SAVED so every package
+    but this will lead to repeat IDs what happens with that? i forgot.
     Package* savePac = (Package*)malloc(sizeof(Package));
     if (savePac == NULL)
         exit(1);
@@ -366,14 +393,14 @@ void savePackageHandler(Package* curP, PackageStorage* storray, HashMapLoc* locm
     savePac->buffer = strdup(curP->buffer); // why strdup i thought we copied curp?
     savePac->id = acquireID(pool);
 
-    Package** packagePass = [package];
-    savePackageMemory(packagePass, 1, idmap);
+    Package* packagePass[1] = {savePac};
+    savePackageMemory(packagePass, 1, packageMemory);
 
     savePackageLocationMap(locmap, savePac);
 }
 
 void savePackageLocationMap(HashMapLoc* locmap, Package* package) {
-    if (locmap->count/0.7 >= locmap->size) {
+    if (locmap->count/(float)0.7 >= locmap->size) {
       expandHashLoc(locmap);
     }
 
@@ -514,7 +541,6 @@ void pullindexes(IndexArray* indexArrayStruct) {
 
 void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct, HashMapID* idmap) {
   int fileIndex;
-  FILE* dataPtr;
   long newFileOffset;
   FILE* data = fopen("data.zn", "ab+");
   int deleted = 1;
@@ -527,7 +553,7 @@ void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct, HashMapID*
 
 
 
-    packageFileWrite(dataPtr, lookupPackageByID(modPack->ids[i], idmap));
+    packageFileWrite(data, lookupPackageByID(modPack->ids[i], idmap));
     int modPackageIndexInID = getIDIndexForModPackages(indexArrayStruct, modPack->ids[i]);
     if (modPackageIndexInID >= 0) {
       fseek(data, indexArrayStruct->indexArray[modPackageIndexInID].fileOffset, SEEK_SET);
