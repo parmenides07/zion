@@ -167,7 +167,8 @@ int main(void) {
         }
         else {
           for (int i = 0; i < selectedCount; i++)
-            writeBuffer(selected[i], key);
+            if (writeBuffer(selected[i], key))
+               exit(1);
         }
     }
 
@@ -184,6 +185,11 @@ int main(void) {
       }
     }
 
+    if (writingBuffer)
+        drawBuffer(babyPack.buffer, currentPosition, cellsize);
+    else if (selectedCount > 0)
+        drawBuffer(selected[0]->buffer, currentPosition, cellsize);
+
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         Vector2 clickPos;
         clickPos.x = (int)(GetMousePosition().x / cellsize) + cameraLocation.x;
@@ -196,7 +202,7 @@ int main(void) {
           babyPack.length = 0;
           babyPack.capacity = 16;
           free(babyPack.buffer);
-          free(babyPack.relationships);
+          //it wont have any relationships so no need to free anything. Its not even intialized.
           newBuffer(&babyPack);
           writingBuffer = false;
         }
@@ -221,6 +227,7 @@ int main(void) {
                 for (int i = 0; i < selectedCount; i++)
                     savePackageHandler(selected[i], ...);
                 selectedCount = 0;
+                selected[selectedCount++] = hit;
               }
             }
         }
@@ -406,8 +413,8 @@ void savePackageMemory(Package** packages, int numPackages, HashMapID* idmap) {
 
 void savePackageHandler(Package* curP, HashMapLoc* locmap, HashMapID* packageMemory, IDPool* pool) {
 
-    ADD TO MODIFIED PACAKGE WITH EVERY PACKAGE SAVED so every package
-    but this will lead to repeat IDs what happens with that? i forgot.
+    check for repeat IDS being saved. if existing just update values no need to instantiate new one.
+    if new or not a repeat, then send it to modified array.
     Package* savePac = (Package*)malloc(sizeof(Package));
     if (savePac == NULL)
         exit(1);
