@@ -127,7 +127,7 @@ int main(void) {
 
   int key = 0;
   //Vector2 lastPosition = {0.0f,0.0f};
-  Package curPack = {"false", 0, NULL, 0, {0.0f, 0.0f}, 0, 0, 0, 0, NULL, 0};
+  Package babyPack = {"false", 0, NULL, 0, {0.0f, 0.0f}, 0, 0, 0, 0, NULL, 0};
   Vector2 currentPosition = {0.0f, 0.0f};
   Vector2 cameraLocation = {0.0f, 0.0f};
   HashMapID packageMemory;
@@ -135,7 +135,7 @@ int main(void) {
   int cellsize = 20;
   Package* selected[MAXSELECTIONS] = {NULL};
   int selectedCount = 0;
-  bool writingNewBuffer = false;
+  bool writingBuffer = false;
 
 // RENAMAE PACKAGESTORAGE TO PACKAGE MEMORY all working packages. MAKE IT A HASHMAP BY INDEX
 
@@ -148,78 +148,101 @@ int main(void) {
     BeginDrawing();
     ClearBackground(BACKGROUND);
     DrawFPS(0,10);
+
     daRenderer(&storage, cameraLocation, cellsize);
-    drawBuffer(curPack.buffer, currentPosition, cellsize);
+    if (writingBuffer) {
+        drawBuffer(babyPack.buffer, currentPosition, cellsize);
+    } else if (selectedCount > 0) {
+        drawBuffer(selected[0]->buffer, currentPosition, cellsize);
+    }
+
     key = GetCharPressed();
 
+    //babyoack onlyl existsas as a temporary scratchpad package for new packages that dont have an actual memory addres yet
+
     if (key > 0) {
-        if(writeBuffer(&curPack, key)==0)
+        if (writingBuffer) {
+          if (writeBuffer(&babyPack, key) == 0)
             exit(1);
+        }
+        else {
+          for (int i = 0; i < selectedCount; i++)
+            writeBuffer(selected[i], key);
+        }
     }
-    currentPosition.x = GetMousePosition().x / cellsize;
-    currentPosition.y = GetMousePosition().y / cellsize;
+
+    if (IsKeyPressed(KEY_BACKSPACE)) {
+      if (writingBuffer) {
+        if (babyPack.length > 0)
+          babyPack.buffer[--babyPack.length] = '\0';
+      }
+      else {
+        for (int i = 0; i < selectedCount; i++) {
+          if (selected[i]->length > 0)
+            selected[i]->buffer[--selected[i]->length] = '\0';
+        }
+      }
+    }
+
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         Vector2 clickPos;
         clickPos.x = (int)(GetMousePosition().x / cellsize) + cameraLocation.x;
         clickPos.y = (int)(GetMousePosition().y / cellsize) + cameraLocation.y;
 
-        if (writingNewBuffer) {
-          curPack.location = clickPos;
-          savePackageHandler(&curPack, ...);
-          writingNewBuffer = false;
-        }
-        else if (????) {
-            instantiate a new package
-
-            curPack.location = currentPosition;
-            savePackage(&curPack, &storage, &hashmap, &idPool);
-            free(curPack.buffer);
-            YOYOMA PUT ALL OF THE FOLLOWNIG INTO AN INITIALIZE PACKAGE THING and we just pass curpack into there.
-            curPack.capacity = 16;
-            curPack.size.x = 0.0;
-            curPack.size.y = 0.0;
-            curPack.length = 0;
+        if (writingBuffer) {
+          babyPack.location = clickPos;
+          savePackageHandler(&babyPack, ...);
+        // reset babyPack here
+          babyPack.length = 0;
+          babyPack.capacity = 16;
+          free(babyPack.buffer);
+          free(babyPack.relationships);
+          newBuffer(&babyPack);
+          writingBuffer = false;
         }
         else {
-            curPack = lookupPackageByLocation(&hashmaploc, clickPos);
+            Package* hit = lookupPackageByLocation(&hashmaploc, clickPos);
 
             if (hit == NULL) {
-                // save all currently selected packages
+                if (selectedCount > 0) {
+                  for (int i = 0; i < selectedCount; i++)
+                    savePackageHandler(selected[i], ...);
+                  selectedCount = 0;
+                }
+                else {
+                  writingBuffer = true;
+                }
+            }
+            else {
+              if (IsKeyDown(KEY_LEFT_SHIFT)) {
+                selected[selectedCount++] = hit;
+              }
+              else {
                 for (int i = 0; i < selectedCount; i++)
                     savePackageHandler(selected[i], ...);
                 selectedCount = 0;
+              }
             }
-        if(newBuffer(&curPack) == 0)
-            exit(1);
-            } else {
-                if (IsKeyDown(KEY_LEFT_SHIFT) && selectedCount < MAXSELECTIONS) { //run condition remember must be < not <= cant let it run that last time when it is equal will add 1 cmon
-                    selected[selectedCount++] = &curPack;
-                    curPack = hit;
-                } else {
-                    for (int i = 0; i < selectedCount; i++)
-                        savePackageHandler(selected[i], ...);
-                    selectedCount = 0;
-                    selected[selectedCount++] = &curPack;
-                }
-            }
-            modifiied package will be added in the save package because that is the one chokepoint where al lof the packages will go from above no need to add to modified each time just put it in save
         }
+            modifiied package will be added in the save package because that is the one chokepoint where al lof the packages will go from above no need to add to modified each time just put it in save
     }
-    if (IsKeyPressed(KEY_ENTER)) {
-      writingNewBuffer = true;
-    }
+
+    currentPosition.x = GetMousePosition().x / cellsize;
+    currentPosition.y = GetMousePosition().y / cellsize;
+
     if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
       cameraLocation.x -= GetMouseDelta().x / cellsize;
       cameraLocation.y -= GetMouseDelta().y / cellsize;
     }
+
     key = 0;
     EndDrawing();
    }
 
-        CloseWindow();
+    CloseWindow();
 
-        return 0;
-    }
+    return 0;
+}
 
 //ID Functions---------------------------------------------------------------------------------------------
 IDPool newIDPool() {
