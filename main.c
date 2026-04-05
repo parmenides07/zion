@@ -102,9 +102,9 @@ Package* lookupPackageByLocation(HashMapLoc* locmap, Vector2 location);
 Package* lookupPackageByID(int id, HashMapID* idmap);
 Package* buildPackageByID(IndexArray* indexArrayStruct, int id);
 void savePackageMemory(Package** packages, int numPackages, HashMapID* idmap);
-void savePackageHandler(Package* curP, HashMapLoc* locmap, HashMapID* packageMemory, IDPool* pool);
+void savePackageHandler(Package* curP, HashMapLoc* locmap, HashMapID* packageMemory, IDPool* pool, ModifiedPackage* modPack);
 void savePackageLocationMap(HashMapLoc* locmap, Package* package);
-void saveModifiedPackage;
+void addToModified(ModifiedPackage* modPack, int id);
 void deletePackageByLocation(HashMapLoc* locmap, Vector2 location);
 void deletePackageByID(int ID);
 void daRenderer(Scope* packages, Vector2 cameraLoc, int cellSize);
@@ -128,17 +128,18 @@ int main(void) {
   int key = 0;
   //Vector2 lastPosition = {0.0f,0.0f};
   Package babyPack = {"false", 0, NULL, 0, {0.0f, 0.0f}, 0, 0, 0, 0, NULL, 0};
+  HashMapLoc locmap = {NULL, 0, 0};
+  HashMapID packageMemory = {NULL, 0, 0};
+  ModifiedPackage modPack = {NULL, 0, 0};
   Vector2 currentPosition = {0.0f, 0.0f};
   Vector2 cameraLocation = {0.0f, 0.0f};
-  HashMapID packageMemory;
   IDPool idPool = newIDPool();
   int cellsize = 20;
   Package* selected[MAXSELECTIONS] = {NULL};
   int selectedCount = 0;
   bool writingBuffer = false;
 
-// RENAMAE PACKAGESTORAGE TO PACKAGE MEMORY all working packages. MAKE IT A HASHMAP BY INDEX
-
+// is it okay to make all these arrays null at first wouldnt they need a realloc thing
 
 
   HashMapLoc hashmaploc = {NULL, 16, 0};
@@ -197,7 +198,7 @@ int main(void) {
 
         if (writingBuffer) {
           babyPack.location = clickPos;
-          savePackageHandler(&babyPack, ...);
+          savePackageHandler(&babyPack, &locmap, &packageMemory, &idPool, &modPack);
         // reset babyPack here
           babyPack.length = 0;
           babyPack.capacity = 16;
@@ -212,7 +213,7 @@ int main(void) {
             if (hit == NULL) {
                 if (selectedCount > 0) {
                   for (int i = 0; i < selectedCount; i++)
-                    savePackageHandler(selected[i], ...);
+                    savePackageHandler(selected[i], &locmap, &packageMemory, &idPool, &modPack);
                   selectedCount = 0;
                 }
                 else {
@@ -225,13 +226,12 @@ int main(void) {
               }
               else {
                 for (int i = 0; i < selectedCount; i++)
-                    savePackageHandler(selected[i], ...);
+                    savePackageHandler(selected[i], &locmap, &packageMemory, &idPool, &modPack);
                 selectedCount = 0;
                 selected[selectedCount++] = hit;
               }
             }
         }
-            modifiied package will be added in the save package because that is the one chokepoint where al lof the packages will go from above no need to add to modified each time just put it in save
     }
 
     currentPosition.x = GetMousePosition().x / cellsize;
@@ -246,9 +246,9 @@ int main(void) {
     EndDrawing();
    }
 
-    CloseWindow();
+   CloseWindow();
 
-    return 0;
+   return 0;
 }
 
 //ID Functions---------------------------------------------------------------------------------------------
@@ -411,22 +411,42 @@ void savePackageMemory(Package** packages, int numPackages, HashMapID* idmap) {
   }
 }
 
-void savePackageHandler(Package* curP, HashMapLoc* locmap, HashMapID* packageMemory, IDPool* pool) {
+void savePackageHandler(Package* curP, HashMapLoc* locmap, HashMapID* packageMemory, IDPool* pool, ModifiedPackage* modPack) {
+    Package* existing = lookupPackageByID(curP->id, packageMemory);
+    if (existing != NULL) {
+        free(existing->buffer);
+        existing->buffer = malloc(curP->capacity);
+        memcpy(existing->buffer, curP->buffer, curP->length + 1);
+        existing->length = curP->length;
+        existing->capacity = curP->capacity;
 
-    check for repeat IDS being saved. if existing just update values no need to instantiate new one.
-    if new or not a repeat, then send it to modified array.
-    Package* savePac = (Package*)malloc(sizeof(Package));
-    if (savePac == NULL)
-        exit(1);
+        free(existing->relationships);
+        existing->relationships = malloc(sizeof(Relationship) * curP->capacRelationships);
+        memcpy(existing->relationships, curP->relationships, sizeof(Relationship) * curP->numRelationships);
+        existing->numRelationships = curP->numRelationships;
+        existing->capacRelationships = curP->capacRelationships;
+        existing->deleted = curP->deleted;
 
-    memcpy(savePac, curP, sizeof(Package));
-    savePac->buffer = strdup(curP->buffer); // why strdup i thought we copied curp?
-    savePac->id = acquireID(pool);
+        addToModified(modPack, existing->id);
+    } else {
+        Package* savePac = malloc(sizeof(Package));
+        memcpy(savePac, curP, sizeof(Package));
 
-    Package* packagePass[1] = {savePac};
-    savePackageMemory(packagePass, 1, packageMemory);
+        savePac->buffer = malloc(curP->capacity);
+        memcpy(savePac->buffer, curP->buffer, curP->length + 1);
+        savePac->capacity = curP->capacity;
 
-    savePackageLocationMap(locmap, savePac);
+        savePac->relationships = malloc(sizeof(Relationship) * curP->capacRelationships);
+        memcpy(savePac->relationships, curP->relationships, sizeof(Relationship) * curP->numRelationships);
+
+        savePac->id = acquireID(pool);
+
+        Package* packagePass[1] = {savePac};
+        savePackageMemory(packagePass, 1, packageMemory);
+        savePackageLocationMap(locmap, savePac);
+
+        addToModified(modPack, savePac->id);
+    }
 }
 
 void savePackageLocationMap(HashMapLoc* locmap, Package* package) {
@@ -449,9 +469,15 @@ void savePackageLocationMap(HashMapLoc* locmap, Package* package) {
     expandHashLoc(locmap);
 }
 
-//for the below rather than storing pointer to package could we just use the straight up id, that would be better no?
-//we dont even need to really sort this by id either, Only add it if that id already dosent exist in the array.
-void saveModifiedPackage
+void addToModified(ModifiedPackage* modPack, int id) {
+  for (int i = 0; i < modPack->length; i++)
+    if (modPack->ids[i] == id) return;
+  if (modPack->length >= modPack ->capacity) {
+    modPack->capacity *= 2;
+    modPack->ids = realloc(modPack->ids, sizeof(int) * modPack->capacity);
+  }
+  modPack->ids[modPack->length++] = id;
+}
 //Package Modification Functions-------------------------------------------------------------------------------------
 void deletePackageByLocation(HashMapLoc* locmap, Vector2 location) {
   int index = hashLoc(location.x, location.y, locmap->size);
