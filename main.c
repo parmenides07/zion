@@ -298,7 +298,7 @@ void newBufferRelationships(Package* curP) {
     exit(1);
   curP->buffer[0] = '\0';
 
-  curP->relationships = (Relationship*)malloc(sizeof(Relationship*) * curP->capacRelationships);
+  curP->relationships = (Relationship*)malloc(sizeof(Relationship) * curP->capacRelationships);
   if (curP->relationships == NULL) //its chill to set it directly like this because its empty we dont care if we lose it also its going to exit program anyway we don gaf
     exit(1);
 }
@@ -311,7 +311,7 @@ int writeBuffer(Package* curP, int input) {
     if(temp == NULL) {
         return 0;
     }
-
+ //t
     curP->buffer = temp;
     //expand array to make room for hte next character
   }
