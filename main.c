@@ -89,24 +89,26 @@ typedef struct Scope {
 #define TEXTBOX ((Color){242, 239, 233, 255})   // warm paper tone
 #define BACKGROUND ((Color){70, 52, 48, 255})   // muted cocoa
 #define WORDS ((Color){38, 32, 30, 255})        // deep ink
+#define SELECTION ((Color){27,31,118,255})
 #define FONTIWANT "Heming.ttf"
 #define MAXSELECTIONS 64
 
 IDPool newIDPool();
 int acquireID(IDPool* pool);
 void releaseID(IDPool* pool, int id);
-int newBuffer(Package* curP);
+void newBufferRelationships(Package* curP);
 int writeBuffer(Package* curP, int input);
 void drawBuffer(char* buffer, Vector2 curPos, int cellSize);
+void drawSelected(char* buffer, Vector2 curPos, int cellSize);
 Package* lookupPackageByLocation(HashMapLoc* locmap, Vector2 location);
 Package* lookupPackageByID(int id, HashMapID* idmap);
 Package* buildPackageByID(IndexArray* indexArrayStruct, int id);
 void savePackageMemory(Package** packages, int numPackages, HashMapID* idmap);
-void savePackageHandler(Package* curP, HashMapLoc* locmap, HashMapID* packageMemory, IDPool* pool, ModifiedPackage* modPack);
+void savePackageHandler(Package* curP, HashMapLoc* locmap, HashMapID* packageMemory, IDPool* pool, ModifiedPackage* modPack, Scope* scope);
 void savePackageLocationMap(HashMapLoc* locmap, Package* package);
 void addToModified(ModifiedPackage* modPack, int id);
 void deletePackageByLocation(HashMapLoc* locmap, Vector2 location);
-void deletePackageByID(int ID);
+void deletePackageByID(int id, HashMapID* memory);
 void daRenderer(Scope* packages, Vector2 cameraLoc, int cellSize);
 int hashLoc(int x, int y, int capacity);
 void expandHashLoc(HashMapLoc* locmap);
@@ -127,21 +129,31 @@ int main(void) {
 
   int key = 0;
   //Vector2 lastPosition = {0.0f,0.0f};
-  Package babyPack = {"false", 0, NULL, 0, {0.0f, 0.0f}, 0, 0, 0, 0, NULL, 0};
-  HashMapLoc locmap = {NULL, 0, 0};
-  HashMapID packageMemory = {NULL, 0, 0};
-  ModifiedPackage modPack = {NULL, 0, 0};
+  Package babyPack = {false, 0, NULL, 16, {0.0f, 0.0f}, {0,0}, 0, 0, NULL, 4};
+  newBufferRelationships(&babyPack);
+
+  HashMapID packageMemory = {NULL, 16, 0};
+  packageMemory.buckets = (Node**)calloc(packageMemory.capacity, sizeof(Node**));
+
+  ModifiedPackage modPack = {NULL, 0, 16};
+  modPack.ids = (int*)calloc(modPack.capacity, sizeof(int*));
+  //calloc for these because there needs to be all those null values but for buffer we set the null value there manually.
+
   Vector2 currentPosition = {0.0f, 0.0f};
   Vector2 cameraLocation = {0.0f, 0.0f};
   IDPool idPool = newIDPool();
   int cellsize = 20;
+
+  Scope scope = {NULL, 0, 16};
+  scope.viewablePackages = (Package**)calloc(scope.capacity, sizeof(Package**));
+
   Package* selected[MAXSELECTIONS] = {NULL};
+  //added to stack because they have fixed amount 64 there is no dynamic growing like others
+
   int selectedCount = 0;
   bool writingBuffer = false;
 
 // is it okay to make all these arrays null at first wouldnt they need a realloc thing
-
-
   HashMapLoc hashmaploc = {NULL, 16, 0};
   hashmaploc.hashArray = (Package**)calloc(hashmaploc.size, sizeof(Package*));
 
@@ -150,7 +162,7 @@ int main(void) {
     ClearBackground(BACKGROUND);
     DrawFPS(0,10);
 
-    daRenderer(&storage, cameraLocation, cellsize);
+    daRenderer(&scope, cameraLocation, cellsize);
     if (writingBuffer) {
         drawBuffer(babyPack.buffer, currentPosition, cellsize);
     } else if (selectedCount > 0) {
@@ -198,13 +210,13 @@ int main(void) {
 
         if (writingBuffer) {
           babyPack.location = clickPos;
-          savePackageHandler(&babyPack, &locmap, &packageMemory, &idPool, &modPack);
+          savePackageHandler(&babyPack, &hashmaploc, &packageMemory, &idPool, &modPack, &scope);
         // reset babyPack here
           babyPack.length = 0;
           babyPack.capacity = 16;
           free(babyPack.buffer);
           //it wont have any relationships so no need to free anything. Its not even intialized.
-          newBuffer(&babyPack);
+          newBufferRelationships(&babyPack);
           writingBuffer = false;
         }
         else {
@@ -213,7 +225,7 @@ int main(void) {
             if (hit == NULL) {
                 if (selectedCount > 0) {
                   for (int i = 0; i < selectedCount; i++)
-                    savePackageHandler(selected[i], &locmap, &packageMemory, &idPool, &modPack);
+                    savePackageHandler(selected[i], &hashmaploc, &packageMemory, &idPool, &modPack, &scope);
                   selectedCount = 0;
                 }
                 else {
@@ -226,7 +238,7 @@ int main(void) {
               }
               else {
                 for (int i = 0; i < selectedCount; i++)
-                    savePackageHandler(selected[i], &locmap, &packageMemory, &idPool, &modPack);
+                    savePackageHandler(selected[i], &hashmaploc, &packageMemory, &idPool, &modPack, &scope);
                 selectedCount = 0;
                 selected[selectedCount++] = hit;
               }
@@ -280,17 +292,15 @@ void releaseID(IDPool* pool, int id) {
 }
 
 //Buffer Functions---------------------------------------------------------------------------------------------
-int newBuffer(Package* curP) {
+void newBufferRelationships(Package* curP) {
   curP->buffer = (char*)malloc(sizeof(char) * curP->capacity);
-
-  if (curP->buffer == NULL) {
-    printf("yo");
-    return 0;
-  }
-  //writing [] signifies that we are trying to get the value so its like the same as doing *bufferLoc[]
+  if (curP->buffer == NULL)
+    exit(1);
   curP->buffer[0] = '\0';
 
-  return 1;
+  curP->relationships = (Relationship*)malloc(sizeof(Relationship*) * curP->capacRelationships);
+  if (curP->relationships == NULL) //its chill to set it directly like this because its empty we dont care if we lose it also its going to exit program anyway we don gaf
+    exit(1);
 }
 
 int writeBuffer(Package* curP, int input) {
@@ -315,14 +325,25 @@ int writeBuffer(Package* curP, int input) {
 }
 
 void drawBuffer(char* buffer, Vector2 curPos, int cellSize) {
+  Vector2 measure = MeasureTextEx(myFont, buffer, cellSize, 1);
+
   //happy accident the whole kepeing the buffer drawn eaxctly where cursor is every second until they release is fire
   Vector2 mousePos = GetMousePosition();
-  DrawRectangle(mousePos.x, mousePos.y - cellSize/15, MeasureTextEx(myFont, buffer, cellSize, 1).x, cellSize, TEXTBOX);
+  DrawRectangle(mousePos.x, mousePos.y - cellSize/15, measure.x, cellSize, TEXTBOX);
   DrawTextEx(myFont, buffer, mousePos, cellSize, 1, WORDS);
 
   Vector2 bottomPos = {0.0f, GetScreenHeight() - cellSize};
-  DrawRectangle(bottomPos.x, bottomPos.y - cellSize/15, MeasureTextEx(myFont, buffer, cellSize, 1).x, cellSize, TEXTBOX);
+  DrawRectangle(bottomPos.x, bottomPos.y - cellSize/15, measure.x, cellSize, TEXTBOX);
   DrawTextEx(myFont, buffer, bottomPos, cellSize, 1, WORDS);
+}
+
+void drawSelected(char* buffer, Vector2 curPos, int cellSize) {
+  Vector2 measure = MeasureTextEx(myFont, buffer, cellSize, 1);
+
+  //happy accident the whole kepeing the buffer drawn eaxctly where cursor is every second until they release is fire
+  Vector2 mousePos = GetMousePosition();
+  DrawRectangle(mousePos.x, mousePos.y - cellSize/15, measure.x, cellSize, SELECTION);
+  DrawTextEx(myFont, buffer, mousePos, cellSize, 1, WORDS);
 }
 
 //Package Search-----------------------------------------------------------------------------------------------
@@ -344,7 +365,7 @@ Package* lookupPackageByLocation(HashMapLoc* locmap, Vector2 location) {
 }
 
 Package* lookupPackageByID(int id, HashMapID* idmap) {
-  index = hashID(id, idmap->capacity);
+  int index = hashID(id, idmap->capacity);
 
   Node* currNode = idmap->buckets[index];
   while (currNode != NULL) {
@@ -353,7 +374,7 @@ Package* lookupPackageByID(int id, HashMapID* idmap) {
     }
     currNode = currNode->next;
   }
-  return NULL;
+  return NULL; //the procedure would be if the package doesnt exist in the memory which is what this checks. then the caller should then call the buiuldpackagebyid
 }
 
 Package* buildPackageByID(IndexArray* indexArrayStruct, int id) {
@@ -411,7 +432,27 @@ void savePackageMemory(Package** packages, int numPackages, HashMapID* idmap) {
   }
 }
 
-void savePackageHandler(Package* curP, HashMapLoc* locmap, HashMapID* packageMemory, IDPool* pool, ModifiedPackage* modPack) {
+void savePackageLocationMap(HashMapLoc* locmap, Package* package) {
+    if (locmap->count/(float)locmap->size > 0.7) {
+      expandHashLoc(locmap);
+    }
+
+    int index = hashLoc(package->location.x, package->location.y, locmap->size);
+    //do while executes at least once
+    int i = index;
+    do {
+      if (locmap->hashArray[i] == NULL || locmap->hashArray[i] == TOMBSTONE) {
+        locmap->hashArray[i] = package;
+        locmap->count++;
+        return;
+      }
+      //this wraps around the array. notice how we use size since we want the full size not count
+      i = (i+1) % locmap->size;
+    } while(i != index);
+    expandHashLoc(locmap);
+}
+
+void savePackageHandler(Package* curP, HashMapLoc* locmap, HashMapID* packageMemory, IDPool* pool, ModifiedPackage* modPack, Scope* scope) {
     Package* existing = lookupPackageByID(curP->id, packageMemory);
     if (existing != NULL) {
         free(existing->buffer);
@@ -446,27 +487,18 @@ void savePackageHandler(Package* curP, HashMapLoc* locmap, HashMapID* packageMem
         savePackageLocationMap(locmap, savePac);
 
         addToModified(modPack, savePac->id);
-    }
-}
 
-void savePackageLocationMap(HashMapLoc* locmap, Package* package) {
-    if (locmap->count/(float)0.7 >= locmap->size) {
-      expandHashLoc(locmap);
-    }
+        //felt right might delete later
+        if (scope->length >= scope->capacity) {
+          scope->capacity *= 2;
+          Package** temp = (Package**)realloc(scope->viewablePackages, scope->length * sizeof(Package*));
+          if (temp == NULL)
+            exit(1);
 
-    int index = hashLoc(package->location.x, package->location.y, locmap->size);
-    //do while executes at least once
-    int i = index;
-    do {
-      if (locmap->hashArray[i] == NULL || locmap->hashArray[i] == TOMBSTONE) {
-        locmap->hashArray[i] = package;
-        locmap->count++;
-        return;
-      }
-      //this wraps around the array. notice how we use size since we want the full size not count
-      i = (i+1) % locmap->size;
-    } while(i != index);
-    expandHashLoc(locmap);
+          scope->viewablePackages = temp;
+        }
+        scope->viewablePackages[scope->length] = savePac;
+    }
 }
 
 void addToModified(ModifiedPackage* modPack, int id) {
@@ -487,6 +519,7 @@ void deletePackageByLocation(HashMapLoc* locmap, Vector2 location) {
     if(locmap->hashArray[i] == NULL)
       return;
     else if ((locmap->hashArray[i]->location.x == location.x) && (locmap->hashArray[i]->location.y == location.y)) {
+      locmap->hashArray[i]->deleted = 1;
       locmap->hashArray[i] = (Package*)1;
       locmap->count--;
       return;
@@ -496,12 +529,35 @@ void deletePackageByLocation(HashMapLoc* locmap, Vector2 location) {
     } while(i != index);
 }
 
-void deletePackageByID(int ID) {
-  shoudl essentially be a lookup by ID and get pointer to package
-  and then add that package pointer to modified packages. with bool deleted. HAVE THIS BE HANDLED IN the disksaving functions
+void deletePackageByID(int id, HashMapID* memory) {
+  int index = hashID(id, memory->capacity);
+  Node* current = memory->buckets[index];
+  Node* deleted;
+
+  if (current == NULL)
+    return;
+
+  if (current->package->id == id) {
+    memory->buckets[index] = current->next; //we have to actually modify memory because current is some lvl 1 doofus we need memory the array thing itself to modify
+    current->package->deleted = 1;
+    free(current);
+  }
+  else { // first edge case is if it is first in list
+    while (current->next != NULL && current->next->package->id != id)
+      current = current->next;
+    if(current->next == NULL)
+      return;
+    current->next->package->deleted = 1;
+    deleted = current->next;
+    current->next = current->next->next;
+    free(deleted);
+  }
 }
 
-
+void deletePackageHandler(Package* package, HashMapLoc* locmap, HashMapID* memory) {
+  deletePackageByID(package->id, memory);
+  deletePackageByLocation(locmap, package->location);
+}
 //Renderer Functions---------------------------------------------------------------------------------------------
 void daRenderer(Scope* packages, Vector2 cameraLoc, int cellSize) {
   Vector2 screenRelPos;
@@ -531,7 +587,7 @@ int hashLoc(int x, int y, int capacity) {
 void expandHashLoc(HashMapLoc* locmap) {
   locmap->size *= 2;
   //cant do realloc i need to do malloc then free wiht a move in between
-  Package** temp = (Package**)malloc(sizeof(Package*) * locmap->size);
+  Package** temp = (Package**)calloc(locmap->size, sizeof(Package*));
   if (temp == NULL)
     exit(1);
 
@@ -541,7 +597,7 @@ void expandHashLoc(HashMapLoc* locmap) {
   //use size since we want to go through the entire array(if we going through all we have to check null or tombstone to make sure we dont pull a nonexistant package)
   for (int i = 0; i < locmap->size/2; i++) {
     if(!(middleman[i] == NULL || middleman[i] == TOMBSTONE))
-      savePackageLocationMap(locmap, middleman[i])
+      savePackageLocationMap(locmap, middleman[i]);
   }
   free(middleman);
 }
@@ -601,6 +657,7 @@ void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct, HashMapID*
   FILE* data = fopen("data.zn", "ab+");
   int deleted = 1;
   int insertIndex;
+  Package* packagelookup;
   for (int i = 0; i < modPack->length; i++) {
     fseek(data, 0, SEEK_END);
     newFileOffset = ftell(data);
@@ -608,8 +665,10 @@ void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct, HashMapID*
     //handle deleted pakcages that were deleted during that session meaning their deleted flag would already be flipped to 1.
 
 
-
-    packageFileWrite(data, lookupPackageByID(modPack->ids[i], idmap));
+    packagelookup = lookupPackageByID(modPack->ids[i], idmap);
+    if (packagelookup == NULL)
+        continue;
+    packageFileWrite(data, packagelookup);
     int modPackageIndexInID = getIDIndexForModPackages(indexArrayStruct, modPack->ids[i]);
     if (modPackageIndexInID >= 0) {
       fseek(data, indexArrayStruct->indexArray[modPackageIndexInID].fileOffset, SEEK_SET);
@@ -620,7 +679,7 @@ void diskSave(ModifiedPackage* modPack, IndexArray* indexArrayStruct, HashMapID*
       insertIndex = -modPackageIndexInID-1;
       if (indexArrayStruct->length + 1 > indexArrayStruct->capacity) {
         indexArrayStruct->capacity *= 2;
-        IndexEntry* temp = (IndexEntry*)realloc(indexArrayStruct->indexArray, sizeof(IndexEntry*) * indexArrayStruct->capacity);
+        IndexEntry* temp = (IndexEntry*)realloc(indexArrayStruct->indexArray, sizeof(IndexEntry) * indexArrayStruct->capacity);
         if (temp == NULL)
           exit(-1);
         indexArrayStruct->indexArray = temp;
