@@ -136,7 +136,7 @@ int main(void) {
   packageMemory.buckets = (Node**)calloc(packageMemory.capacity, sizeof(Node**));
 
   ModifiedPackage modPack = {NULL, 0, 16};
-  modPack.ids = (int*)calloc(modPack.capacity, sizeof(int*));
+  modPack.ids = (int*)calloc(modPack.capacity, sizeof(int));
   //calloc for these because there needs to be all those null values but for buffer we set the null value there manually.
 
   Vector2 currentPosition = {0.0f, 0.0f};
@@ -497,7 +497,7 @@ void savePackageHandler(Package* curP, HashMapLoc* locmap, HashMapID* packageMem
 
           scope->viewablePackages = temp;
         }
-        scope->viewablePackages[scope->length] = savePac;
+        scope->viewablePackages[scope->length++] = savePac;
     }
 }
 
@@ -561,6 +561,7 @@ void deletePackageHandler(Package* package, HashMapLoc* locmap, HashMapID* memor
 //Renderer Functions---------------------------------------------------------------------------------------------
 void daRenderer(Scope* packages, Vector2 cameraLoc, int cellSize) {
   Vector2 screenRelPos;
+  Vector2 temp;
   for (int i = 0; i < packages->length; i++) {
     //printf("rendering package: %s at %f %f\n", pacStor->storageArray[i]->buffer, cameraLoc.x, cameraLoc.y);
     if (packages->viewablePackages[i] == NULL)  // add this
@@ -572,7 +573,8 @@ void daRenderer(Scope* packages, Vector2 cameraLoc, int cellSize) {
     //righgt edge greater than 0?, left edge grearter than horizontal max?
     if (screenRelPos.x + MeasureText(packages->viewablePackages[i]->buffer, cellSize) >= 0 && screenRelPos.x <= GetScreenWidth()) {
       if (screenRelPos.y >= 0 && screenRelPos.y <= GetScreenHeight()) {
-        DrawRectangle(screenRelPos.x, screenRelPos.y - cellSize/15, MeasureTextEx(myFont, packages->viewablePackages[i]->buffer, cellSize, 1).x, cellSize, TEXTBOX);
+        temp = MeasureTextEx(myFont, packages->viewablePackages[i]->buffer, cellSize, 1);
+        DrawRectangle(screenRelPos.x, screenRelPos.y - cellSize/15, temp.x, cellSize, TEXTBOX);
         DrawTextEx(myFont, packages->viewablePackages[i]->buffer, screenRelPos, cellSize, 1, WORDS);
       }
     }
@@ -609,7 +611,7 @@ int hashID(int id, int capacity) {
 void expandHashID(HashMapID* idmap) {
   idmap->capacity *= 2;
 
-  Node** newBuckets = malloc(sizeof(Node*) * idmap->capacity);
+  Node** newBuckets = (Node**)calloc(idmap-> capacity, sizeof(Node*));
   if (newBuckets == NULL)
     exit(1);
   // very cool logic so we have for loop to iterate through every bucket and then while loop to go till it hits end
