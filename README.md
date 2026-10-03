@@ -5,7 +5,7 @@ open canvas, and pan around. The original type-then-place interaction is preserv
 
 Build with `make`, then run `./zion` from the project folder. Requires a C99
 compiler, make, raylib, and its Linux desktop libraries (OpenGL and X11).
-Verified with raylib 6.0. The canvas uses cream paper colors and charcoal ink.
+Verified with raylib 6.0. The canvas uses cream eggshell, charcoal ink, and ruby red.
 The bundled JetBrains Mono NL Medium font (`JBM.ttf`) loads beside the executable.
 
 | Control | Action |
@@ -22,9 +22,9 @@ The bundled JetBrains Mono NL Medium font (`JBM.ttf`) loads beside the executabl
 | Ctrl+S | Save now; place any draft at the pointer |
 
 Placed notes and edits save automatically, at most once per second. Closing the
-window also places any unfinished draft at the pointer and saves. A failed save
+window also places any unfinished draft at the pointer and saves.A failed save
 keeps changes open and displays an error so you can fix the folder permissions or
-disk space and retry.
+disk space and retry. Will anyone ever actually read this?
 
 The canvas lives in `data.zn` and `index.zn` in the **working directory**. Keep both
 files together when backing up or moving a canvas, and open only one instance per

@@ -91,10 +91,10 @@ typedef struct Scope {
 #define FONTIWANT "Heming.ttf"
 */
 
-#define TEXTBOX ((Color){251, 247, 237, 255})  // light cream paper
-#define BACKGROUND ((Color){241, 234, 219, 255}) // warm cream canvas
+#define TEXTBOX ((Color){241, 234, 219, 255})  // light cream paper
+#define BACKGROUND ((Color){38, 43, 47, 255}) // warm cream canvas
 #define WRITINGBG BACKGROUND
-#define WORDS ((Color){38, 43, 47, 255})       // charcoal ink
+#define WORDS ((Color){164, 22, 35, 255})       // charcoal ink
 #define SELECTION WORDS
 #define FONTIWANT "JBM.ttf"
 #define MAXSELECTIONS 64
