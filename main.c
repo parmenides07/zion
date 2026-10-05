@@ -91,12 +91,12 @@ typedef struct Scope {
 #define FONTIWANT "Heming.ttf"
 */
 
-#define TEXTBOX ((Color){241, 234, 219, 255})  // light cream paper
-#define BACKGROUND ((Color){38, 43, 47, 255}) // warm cream canvas
+#define TEXTBOX    ((Color){207, 204, 194, 255}) // #CFCCC2
+#define BACKGROUND ((Color){52, 57, 60, 255})    // #34393C
+#define WORDS      ((Color){58, 68, 68, 255})    // #3A4444
 #define WRITINGBG BACKGROUND
-#define WORDS ((Color){164, 22, 35, 255})       // charcoal ink
 #define SELECTION WORDS
-#define FONTIWANT "JBM.ttf"
+#define FONTIWANT "SpaceMono-Regular.ttf"
 #define MAXSELECTIONS 64
 
 
@@ -175,7 +175,7 @@ int main(void) {
   SetTextureFilter(myFont.texture, TEXTURE_FILTER_BILINEAR);
 
   Vector2 cameraLocation = {0, 0};
-  const int cellsize = 20;
+  const int cellsize = 30;
   Package* selected[MAXSELECTIONS] = {NULL};
   int selectedCount = 0;
   bool writingBuffer = false;
